@@ -1,0 +1,22 @@
+{
+  "name": "codercops-discord-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The CODERCOPS community bot: posts releases, starter issues and merged PRs from our open source repos into Discord.",
+  "license": "MIT",
+  "author": "CODERCOPS (https://www.codercops.com)",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "register": "node scripts/register-commands.mjs"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261011.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.149.0"
+  }
+}

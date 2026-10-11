@@ -1,0 +1,152 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import worker, { FINAL_RESULTS_CRON } from "../src/index";
+import { makeEnv, mockFetch } from "./helpers";
+
+const toHex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+async function signedDiscordRequest(body: unknown) {
+  const pair = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as CryptoKeyPair;
+  const publicKey = toHex((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer);
+  const text = JSON.stringify(body);
+  const timestamp = "1700000000";
+  const signature = toHex(await crypto.subtle.sign({ name: "Ed25519" }, pair.privateKey, new TextEncoder().encode(timestamp + text)));
+  const request = new Request("https://bot.example/interactions", {
+    method: "POST",
+    headers: { "X-Signature-Ed25519": signature, "X-Signature-Timestamp": timestamp },
+    body: text,
+  });
+  return { request, publicKey };
+}
+
+async function githubRequest(secret: string, event: string, body: unknown) {
+  const text = JSON.stringify(body);
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = "sha256=" + toHex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(text)));
+  return new Request("https://bot.example/github", {
+    method: "POST",
+    headers: { "X-Hub-Signature-256": signature, "X-GitHub-Event": event },
+    body: text,
+  });
+}
+
+function makeCtx() {
+  const pending: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p), passThroughOnException() {} } as unknown as ExecutionContext;
+  return { ctx, settle: () => Promise.all(pending) };
+}
+
+let env = makeEnv();
+beforeEach(() => {
+  env = makeEnv();
+});
+
+describe("routing", () => {
+  it("serves a small info page and 404s everything else", async () => {
+    const { ctx } = makeCtx();
+    const home = await worker.fetch(new Request("https://bot.example/"), env, ctx);
+    expect(home.status).toBe(200);
+    expect(await home.json()).toMatchObject({ name: "codercops-discord-bot" });
+    expect((await worker.fetch(new Request("https://bot.example/nope"), env, ctx)).status).toBe(404);
+    expect((await worker.fetch(new Request("https://bot.example/github"), env, ctx)).status).toBe(404);
+  });
+});
+
+describe("POST /interactions", () => {
+  it("answers Discord's PING when the signature is valid", async () => {
+    const { request, publicKey } = await signedDiscordRequest({ type: 1 });
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(request, makeEnv({ DISCORD_PUBLIC_KEY: publicKey }), ctx);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ type: 1 });
+  });
+
+  it("rejects requests that aren't signed by Discord", async () => {
+    const { request } = await signedDiscordRequest({ type: 1 });
+    const other = await signedDiscordRequest({ type: 1 });
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(request, makeEnv({ DISCORD_PUBLIC_KEY: other.publicKey }), ctx);
+    expect(res.status).toBe(401);
+  });
+
+  it("defers a command, then fills in an ephemeral reply through the interaction webhook", async () => {
+    const fetched = mockFetch((url) =>
+      url.pathname.endsWith("/issues")
+        ? [{ number: 7, title: "Starter", html_url: "https://github.com/codercops/toolbelt/issues/7", labels: [{ name: "good first issue" }] }]
+        : { total_count: 0, items: [] }
+    );
+    const { request, publicKey } = await signedDiscordRequest({
+      type: 2,
+      token: "interaction-token",
+      data: { name: "issues", options: [{ name: "repo", value: "toolbelt" }] },
+    });
+    const { ctx, settle } = makeCtx();
+    const res = await worker.fetch(request, makeEnv({ DISCORD_PUBLIC_KEY: publicKey }), ctx);
+    expect(await res.json()).toEqual({ type: 5, data: { flags: 64 } });
+
+    await settle();
+    const reply = fetched.discord()[0];
+    expect(reply).toMatchObject({
+      method: "PATCH",
+      url: "https://discord.com/api/v10/webhooks/111/interaction-token/messages/@original",
+    });
+    expect(reply?.body.embeds[0].title).toBe("toolbelt: 1 open starter issue");
+    // Only the chosen repo was queried.
+    expect(fetched.calls.filter((c) => c.url.includes("api.github.com")).every((c) => c.url.includes("/repos/codercops/toolbelt/"))).toBe(true);
+  });
+});
+
+describe("POST /github", () => {
+  it("rejects a bad signature before doing anything", async () => {
+    const fetched = mockFetch();
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(await githubRequest("wrong-secret", "ping", { zen: "x" }), env, ctx);
+    expect(res.status).toBe(401);
+    expect(fetched.calls).toHaveLength(0);
+  });
+
+  it("accepts a signed ping", async () => {
+    mockFetch();
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(await githubRequest("test-webhook-secret", "ping", { zen: "x" }), env, ctx);
+    expect(await res.json()).toEqual({ ok: true, result: "pong" });
+  });
+
+  it("returns 500 when Discord fails, so GitHub shows the delivery as failed", async () => {
+    globalThis.fetch = (async () => new Response("nope", { status: 500 })) as typeof fetch;
+    const { ctx } = makeCtx();
+    const body = {
+      action: "published",
+      repository: { name: "toolbelt", owner: { login: "codercops" } },
+      release: { name: "v1", tag_name: "v1", body: "", html_url: "https://github.com/codercops/toolbelt/releases/tag/v1", draft: false, prerelease: false },
+    };
+    const res = await worker.fetch(await githubRequest("test-webhook-secret", "release", body), env, ctx);
+    expect(res.status).toBe(500);
+  });
+});
+
+describe("scheduled leaderboard", () => {
+  const run = (cron: string, when: string) =>
+    worker.scheduled({ cron, scheduledTime: Date.parse(when), noRetry() {} } as ScheduledController, env);
+
+  it("posts weekly during the event and stays quiet outside it", async () => {
+    const fetched = mockFetch();
+    await run("30 4 * * 1", "2026-09-28T04:30:00Z");
+    await run("30 4 * * 1", "2026-11-02T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(0);
+
+    await run("30 4 * * 1", "2026-10-12T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(1);
+    expect(fetched.discord()[0]?.url).toBe("https://discord.com/api/v10/channels/chan-leaderboard/messages");
+    expect(fetched.discord()[0]?.body.embeds[0].title).toBe("Hacktoberfest 2026 leaderboard");
+  });
+
+  it("posts final results once, right after the event, and not in later years", async () => {
+    const fetched = mockFetch();
+    await run(FINAL_RESULTS_CRON, "2026-11-01T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(1);
+    expect(fetched.discord()[0]?.body.embeds[0].title).toBe("Hacktoberfest 2026 leaderboard: final results");
+
+    await run(FINAL_RESULTS_CRON, "2027-11-01T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(1);
+  });
+});

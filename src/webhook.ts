@@ -1,0 +1,163 @@
+// Handles GitHub webhook events: releases, starter issues and merged PRs.
+import type { Config, Env } from "./config";
+import { editMessage, sendMessage } from "./discord";
+import { searchMergedPrs, type StarterIssue } from "./github";
+import { invalidateLeaderboard } from "./leaderboard";
+import { mergedPrMessage, releaseMessage, starterIssueMessage, type StarterState } from "./messages";
+
+interface Repository {
+  name: string;
+  owner: { login: string };
+}
+
+interface ReleaseEvent {
+  action: string;
+  repository: Repository;
+  release: { name: string | null; tag_name: string; body: string | null; html_url: string; draft: boolean; prerelease: boolean };
+}
+
+interface IssuesEvent {
+  action: string;
+  repository: Repository;
+  /** The label that was added or removed, on labeled/unlabeled events. */
+  label?: { name: string };
+  issue: {
+    number: number;
+    title: string;
+    html_url: string;
+    state: "open" | "closed";
+    labels: { name: string }[];
+    assignees: { login: string }[];
+    pull_request?: unknown;
+  };
+}
+
+interface PullRequestEvent {
+  action: string;
+  repository: Repository;
+  pull_request: {
+    number: number;
+    title: string;
+    html_url: string;
+    merged: boolean;
+    merged_at: string | null;
+    user: { login: string; type: string };
+    labels: { name: string }[];
+  };
+}
+
+const ours = (cfg: Config, repo: Repository) =>
+  repo.owner.login.toLowerCase() === cfg.org.toLowerCase() && cfg.repos.includes(repo.name);
+
+export async function handleGithubEvent(event: string, payload: unknown, env: Env, cfg: Config): Promise<string> {
+  switch (event) {
+    case "ping":
+      return "pong";
+    case "release":
+      return onRelease(payload as ReleaseEvent, env, cfg);
+    case "issues":
+      return onIssue(payload as IssuesEvent, env, cfg);
+    case "pull_request":
+      return onPullRequest(payload as PullRequestEvent, env, cfg);
+    default:
+      return `ignored event ${event}`;
+  }
+}
+
+async function onRelease(e: ReleaseEvent, env: Env, cfg: Config): Promise<string> {
+  if (e.action !== "published" || e.release.draft || e.release.prerelease || !ours(cfg, e.repository)) {
+    return "ignored release";
+  }
+  await sendMessage(env, env.CHANNEL_RELEASES, releaseMessage(e.repository.name, e.release));
+  return "posted release";
+}
+
+/** An issue belongs in the feed when it has a starter label and isn't blocked. */
+export function isStarterIssue(labels: string[], cfg: Config): boolean {
+  const names = labels.map((l) => l.toLowerCase());
+  return names.some((n) => cfg.starterLabels.includes(n)) && !names.includes("blocked");
+}
+
+export function starterState(issue: IssuesEvent["issue"]): StarterState {
+  if (issue.state === "closed") return { kind: "done" };
+  const assignee = issue.assignees[0];
+  return assignee ? { kind: "claimed", by: assignee.login } : { kind: "open" };
+}
+
+interface FeedRecord {
+  messageId: string;
+  state: StarterState["kind"];
+}
+
+// Keeps one message per issue in #starter-issues and edits it as the issue is
+// claimed, released or closed, so the feed always shows what's really free.
+async function onIssue(e: IssuesEvent, env: Env, cfg: Config): Promise<string> {
+  if (!ours(cfg, e.repository) || e.issue.pull_request) return "ignored issue";
+  const labels = e.issue.labels.map((l) => l.name);
+  const issue: StarterIssue = {
+    repo: e.repository.name,
+    number: e.issue.number,
+    title: e.issue.title,
+    url: e.issue.html_url,
+    labels,
+  };
+  const key = `issue:${issue.repo}#${issue.number}`;
+  const record = await env.STATE.get<FeedRecord>(key, "json");
+  const state = starterState(e.issue);
+
+  if (!record) {
+    // A new post needs a reason: a starter label was just added, or the issue
+    // became free again. "opened" is skipped on purpose, because GitHub also
+    // sends "labeled" for every label an issue is created with.
+    const starterLabelAdded =
+      e.action === "labeled" && cfg.starterLabels.includes((e.label?.name ?? "").toLowerCase());
+    const freedUp = e.action === "unassigned" || e.action === "reopened";
+    if (!starterLabelAdded && !freedUp) return "ignored issue";
+    // Only announce issues that are free to take right now.
+    if (state.kind !== "open" || !isStarterIssue(labels, cfg)) return "ignored issue";
+    const messageId = await sendMessage(env, env.CHANNEL_STARTER_ISSUES, starterIssueMessage(issue, state));
+    await env.STATE.put(key, JSON.stringify({ messageId, state: state.kind } satisfies FeedRecord));
+    return "posted starter issue";
+  }
+
+  await editMessage(env, env.CHANNEL_STARTER_ISSUES, record.messageId, starterIssueMessage(issue, state));
+  await env.STATE.put(key, JSON.stringify({ messageId: record.messageId, state: state.kind } satisfies FeedRecord));
+  return `updated starter issue (${state.kind})`;
+}
+
+async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promise<string> {
+  const pr = e.pull_request;
+  if (e.action !== "closed" || !pr.merged || !ours(cfg, e.repository)) return "ignored pull request";
+  if (pr.user.type === "Bot" || cfg.excludedUsers.has(pr.user.login.toLowerCase())) return "ignored pull request author";
+
+  let countInWindow: { count: number; label: string } | undefined;
+  const mergedAt = pr.merged_at ? new Date(pr.merged_at) : new Date();
+  const counts =
+    pr.labels.some((l) => l.name === cfg.leaderboard.label) &&
+    mergedAt >= cfg.leaderboard.start &&
+    mergedAt <= cfg.leaderboard.end;
+  if (counts) {
+    await invalidateLeaderboard(env);
+    try {
+      // GitHub's search index can lag a few seconds behind the merge, so count
+      // the author's other PRs and add this one.
+      const login = pr.user.login.toLowerCase();
+      const others = (await searchMergedPrs(env, cfg)).filter(
+        (p) => p.login.toLowerCase() === login && p.url !== pr.html_url
+      );
+      countInWindow = { count: others.length + 1, label: cfg.leaderboard.title };
+    } catch {
+      // The shoutout matters more than the count; post it without one.
+    }
+  }
+
+  await sendMessage(
+    env,
+    env.CHANNEL_MERGED_PRS,
+    mergedPrMessage(
+      { repo: e.repository.name, number: pr.number, title: pr.title, url: pr.html_url, login: pr.user.login },
+      countInWindow
+    )
+  );
+  return "posted merged pull request";
+}

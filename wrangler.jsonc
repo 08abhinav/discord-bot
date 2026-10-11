@@ -1,0 +1,35 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "codercops-discord-bot",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  "triggers": {
+    // Mondays 04:30 UTC (10:00 IST): weekly leaderboard.
+    // Nov 1 04:30 UTC: final results. Keep in sync with FINAL_RESULTS_CRON in src/index.ts.
+    "crons": ["30 4 * * 1", "30 4 1 11 *"]
+  },
+  "kv_namespaces": [{ "binding": "STATE", "id": "a930275781aa44f682ebe9a201d217c7" }],
+  "vars": {
+    "DISCORD_APPLICATION_ID": "1192400864573403166",
+    "DISCORD_PUBLIC_KEY": "371c6c8be1275687285e87e2d76c1a00bb7e640f5382d2309660ac08036aad67",
+    "CHANNEL_RELEASES": "1558894544618004651",
+    "CHANNEL_STARTER_ISSUES": "1558894547873046598",
+    "CHANNEL_MERGED_PRS": "1558894551006056538",
+    "CHANNEL_LEADERBOARD": "1438503873064210432",
+    "GITHUB_ORG": "codercops",
+    "REPOS": "chatcops,ogcops,toolbelt",
+    "STARTER_LABELS": "good first issue,help wanted",
+    // Maintainers: no shoutouts and no leaderboard rows for these GitHub logins.
+    "EXCLUDED_USERS": "anurag629",
+    "LEADERBOARD_TITLE": "Hacktoberfest 2026",
+    "LEADERBOARD_LABEL": "hacktoberfest-accepted",
+    "LEADERBOARD_START": "2026-10-01T00:00:00Z",
+    "LEADERBOARD_END": "2026-10-31T23:59:59Z",
+    "LEADERBOARD_MIN_PRS": "5",
+    "LEADERBOARD_TOP_N": "5",
+    "LEADERBOARD_REWARD": "a CODERCOPS T-shirt and stickers"
+  }
+  // Secrets, set with `wrangler secret put`:
+  //   DISCORD_BOT_TOKEN, GITHUB_WEBHOOK_SECRET, and optionally GITHUB_TOKEN
+}
