@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import worker, { FINAL_RESULTS_CRON } from "../src/index";
-import { makeEnv, mockFetch } from "./helpers";
+import worker, { DAILY_CRON } from "../src/index";
+import { makeEnv, mockFetch, OCTOBER } from "./helpers";
 
 const toHex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 
@@ -125,28 +125,70 @@ describe("POST /github", () => {
 });
 
 describe("scheduled leaderboard", () => {
-  const run = (cron: string, when: string) =>
+  const run = (when: string, cron = DAILY_CRON) =>
     worker.scheduled({ cron, scheduledTime: Date.parse(when), noRetry() {} } as ScheduledController, env);
 
-  it("posts weekly during the event and stays quiet outside it", async () => {
+  it("posts on Mondays while a program runs and stays quiet otherwise", async () => {
     const fetched = mockFetch();
-    await run("30 4 * * 1", "2026-09-28T04:30:00Z");
-    await run("30 4 * * 1", "2026-11-02T04:30:00Z");
+    await run("2026-09-28T04:30:00Z"); // a Monday before it starts
+    await run("2026-10-13T04:30:00Z"); // a Tuesday during it
     expect(fetched.discord()).toHaveLength(0);
 
-    await run("30 4 * * 1", "2026-10-12T04:30:00Z");
+    await run("2026-10-12T04:30:00Z");
     expect(fetched.discord()).toHaveLength(1);
     expect(fetched.discord()[0]?.url).toBe("https://discord.com/api/v10/channels/chan-leaderboard/messages");
-    expect(fetched.discord()[0]?.body.embeds[0].title).toBe("Hacktoberfest 2026 leaderboard");
+    const embed = fetched.discord()[0]?.body.embeds[0];
+    expect(embed.title).toBe("Hacktoberfest 2026 leaderboard");
+    expect(embed.url).toBe("https://bot.example/leaderboard/2026-10");
   });
 
-  it("posts final results once, right after the event, and not in later years", async () => {
+  it("posts final results once, on the first run after the program ends", async () => {
     const fetched = mockFetch();
-    await run(FINAL_RESULTS_CRON, "2026-11-01T04:30:00Z");
+    await run("2026-10-31T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(0);
+
+    await run("2026-11-01T04:30:00Z");
     expect(fetched.discord()).toHaveLength(1);
     expect(fetched.discord()[0]?.body.embeds[0].title).toBe("Hacktoberfest 2026 leaderboard: final results");
 
-    await run(FINAL_RESULTS_CRON, "2027-11-01T04:30:00Z");
+    // Not again the next day (a Monday), and no weekly post either: it's over.
+    await run("2026-11-02T04:30:00Z");
     expect(fetched.discord()).toHaveLength(1);
+  });
+
+  it("doesn't announce a program that ended long before it was added", async () => {
+    const fetched = mockFetch();
+    await run("2026-11-20T04:30:00Z");
+    await run("2027-11-01T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(0);
+  });
+
+  it("adds the configured note to the final results", async () => {
+    env = makeEnv({ FINAL_RESULTS_NOTE: "Add it to your profile." });
+    const fetched = mockFetch(() => ({
+      total_count: 1,
+      items: [{ html_url: "https://github.com/codercops/toolbelt/pull/1", user: { login: "ada" }, pull_request: { merged_at: "2026-10-02T00:00:00Z" } }],
+    }));
+    await run("2026-11-01T04:30:00Z");
+    expect(fetched.discord()[0]?.body.embeds[0].description).toContain("Add it to your profile.");
+  });
+
+  it("handles several programs, each on its own", async () => {
+    const november = { ...OCTOBER, id: "2026-11", title: "November sprint", start: "2026-11-01T00:00:00Z", end: "2026-11-30T23:59:59Z" };
+    env = makeEnv({ PROGRAMS: [OCTOBER, november] });
+    const fetched = mockFetch();
+    // Monday Nov 2: October's final results were due the day before but the cron
+    // missed it, and November is running.
+    await run("2026-11-02T04:30:00Z");
+    expect(fetched.discord().map((c) => c.body.embeds[0].title)).toEqual([
+      "Hacktoberfest 2026 leaderboard: final results",
+      "November sprint leaderboard",
+    ]);
+  });
+
+  it("ignores crons it doesn't know", async () => {
+    const fetched = mockFetch();
+    await run("2026-10-12T04:30:00Z", "0 0 * * *");
+    expect(fetched.calls).toHaveLength(0);
   });
 });

@@ -132,20 +132,24 @@ async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promis
 
   let countInWindow: { count: number; label: string } | undefined;
   const mergedAt = pr.merged_at ? new Date(pr.merged_at) : new Date();
-  const counts =
-    pr.labels.some((l) => l.name === cfg.leaderboard.label) &&
-    mergedAt >= cfg.leaderboard.start &&
-    mergedAt <= cfg.leaderboard.end;
-  if (counts) {
-    await invalidateLeaderboard(env);
+  // The program this PR counts for, if any.
+  const program = cfg.programs.find(
+    (p) =>
+      p.repos.includes(e.repository.name) &&
+      pr.labels.some((l) => l.name === p.label) &&
+      mergedAt >= p.start &&
+      mergedAt <= p.end
+  );
+  if (program) {
+    await invalidateLeaderboard(env, program);
     try {
       // GitHub's search index can lag a few seconds behind the merge, so count
       // the author's other PRs and add this one.
       const login = pr.user.login.toLowerCase();
-      const others = (await searchMergedPrs(env, cfg)).filter(
+      const others = (await searchMergedPrs(env, cfg, program)).filter(
         (p) => p.login.toLowerCase() === login && p.url !== pr.html_url
       );
-      countInWindow = { count: others.length + 1, label: cfg.leaderboard.title };
+      countInWindow = { count: others.length + 1, label: program.title };
     } catch {
       // The shoutout matters more than the count; post it without one.
     }

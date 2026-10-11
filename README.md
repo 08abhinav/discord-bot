@@ -1,13 +1,13 @@
 # CODERCOPS Discord bot
 
-The bot behind the open source channels on the [CODERCOPS Discord server](https://discord.gg/mpGdJyjaRQ). It watches our public repos ([chatcops](https://github.com/codercops/chatcops), [ogcops](https://github.com/codercops/ogcops), [toolbelt](https://github.com/codercops/toolbelt)) and keeps contributors in the loop:
+The bot behind the open source channels on the [CODERCOPS Discord server](https://discord.gg/mpGdJyjaRQ). It watches our public repos ([chatcops](https://github.com/codercops/chatcops), [ogcops](https://github.com/codercops/ogcops), [toolbelt](https://github.com/codercops/toolbelt) and this one) and keeps contributors in the loop:
 
 - **Releases** go to `#releases` with their notes.
 - **Starter issues** (`good first issue` and `help wanted`) go to `#starter-issues`. Each issue gets one message, and the bot edits it when the issue is claimed, freed up or closed, so the channel always shows what's really available.
 - **Merged PRs** get a shoutout in `#merged-prs`.
-- **`/issues`** lists the open starter issues nobody has claimed yet. **`/leaderboard`** shows who has the most merged PRs in the current event.
-- A **weekly leaderboard** is posted while an event such as Hacktoberfest is running, and the final results once it ends.
-- The same ranking is public at [`/leaderboard`](https://codercops-discord-bot.copscoder.workers.dev/leaderboard), with a JSON version at `/leaderboard.json`.
+- **`/issues`** lists the open starter issues nobody has claimed yet. **`/leaderboard`** shows who has the most merged PRs in a contributor program.
+- A **weekly leaderboard** is posted while a program is running, and the final results once it ends.
+- Every program has a public page, for example [CODERCOPS October 2026](https://codercops-discord-bot.copscoder.workers.dev/leaderboard/2026-10), with a JSON version next to it.
 - **`/checkin`** logs a day on one of our learning roadmaps. The bot opens a log thread for each learner, adds every day to it and keeps their streak. **`/streaks`** shows who's on a roll, and the weekly post includes the streak board.
 
 It runs on Cloudflare Workers. There is no server to keep alive and no Discord gateway connection: Discord and GitHub both call the Worker over HTTPS.
@@ -18,8 +18,8 @@ It runs on Cloudflare Workers. There is no server to keep alive and no Discord g
 | --- | --- | --- |
 | `POST /interactions` | Discord, when someone runs a slash command | The Ed25519 signature is checked, the command is acknowledged right away, and the reply is filled in once GitHub has answered. |
 | `POST /github` | GitHub webhooks (`release`, `issues`, `pull_request`) | The HMAC signature is checked, then the event becomes a new or edited Discord message. |
-| `GET /leaderboard`, `GET /leaderboard.json` | Anyone | The current ranking as a page or as JSON. No scripts, no cookies, cached for five minutes. |
-| cron | Cloudflare, Mondays 04:30 UTC and Nov 1 | Posts the leaderboard and the learning streaks. |
+| `GET /leaderboard/{id}`, `GET /leaderboard/{id}.json` | Anyone | One program's ranking as a page or as JSON. `/leaderboard` shows the current program. No scripts, no cookies, cached for five minutes. |
+| cron | Cloudflare, every day at 04:30 UTC | On Mondays, posts the leaderboard of each running program and the learning streaks. On any day, posts the final results of a program that has just ended. |
 
 A small KV namespace remembers which Discord message belongs to which issue, caches the leaderboard for a few minutes, and stores each learner's check-in progress.
 
@@ -29,19 +29,40 @@ The code is split so the logic is easy to test:
 - `src/webhook.ts` decides what each GitHub event means.
 - `src/messages.ts` builds every Discord message. It has no I/O.
 - `src/leaderboard.ts` ranks contributors.
+- `src/programs.ts` picks the program to show and says whether it's upcoming, running or over.
 - `src/page.ts` builds the public leaderboard page and its JSON. It has no I/O either.
 - `src/checkin.ts` holds the check-in rules and the streak ranking.
 - `src/github.ts` and `src/discord.ts` are thin API clients.
 
-## Leaderboard rules
+## Contributor programs
 
-A pull request counts when it was merged inside the event window (UTC), in one of the repos above, and carries the event label (`hacktoberfest-accepted` for Hacktoberfest 2026). Maintainers listed in `EXCLUDED_USERS` don't appear.
+A program is a stretch of time in which merged pull requests are counted and the top contributors get something for it. CODERCOPS October 2026 is the first one. Each program is one entry in `PROGRAMS` in `wrangler.jsonc`:
 
-People are ranked by how many PRs they got merged. A tie goes to whoever reached that count first. Only contributors with at least `LEADERBOARD_MIN_PRS` merged PRs can be among the `LEADERBOARD_TOP_N` winners, so there can be fewer winners than that.
+```jsonc
+{
+  "id": "2026-10",                      // the page lives at /leaderboard/2026-10
+  "title": "CODERCOPS October 2026",
+  "kind": "merged-prs",
+  "label": "hacktoberfest-accepted",    // a merged PR counts only with this label
+  "start": "2026-10-01T00:00:00Z",
+  "end": "2026-10-31T23:59:59Z",
+  "minPrs": 5,
+  "topN": 5,
+  "reward": "a CODERCOPS T-shirt and stickers",
+  "note": "This swag comes from CODERCOPS's own open source program. It is separate from Hacktoberfest and its rewards."
+}
+```
 
-The reward is CODERCOPS's own. It comes from our open source program and is separate from Hacktoberfest and whatever Hacktoberfest gives its participants. `LEADERBOARD_NOTE` puts that sentence under every leaderboard post.
+To run another one, add an entry with a new `id`. Nothing else changes: the old program keeps its page and its results, the new one gets its own page, its own weekly posts and its own final results. `repos` is optional and defaults to every repo in `REPOS`. Programs can overlap.
 
-Everything is in the `vars` block of `wrangler.jsonc`.
+How a program is scored:
+
+- A pull request counts when it was merged inside the window (UTC), in one of the program's repos, and carries the program's label. Maintainers listed in `EXCLUDED_USERS` don't appear.
+- People are ranked by how many PRs they got merged. A tie goes to whoever reached that count first.
+- Only contributors with at least `minPrs` merged PRs can be among the `topN` winners, so there can be fewer winners than that.
+- `note` is shown under every leaderboard post and on the page. Ours says that the reward is CODERCOPS's own and separate from Hacktoberfest and whatever Hacktoberfest gives its participants.
+
+`kind` is there because not every program will be about merged PRs. `merged-prs` is the only kind the bot can count today, and entries of any other kind are skipped.
 
 ## Check-in rules
 

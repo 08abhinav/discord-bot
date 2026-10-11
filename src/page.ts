@@ -1,29 +1,51 @@
-// The public leaderboard page. Pure functions that build HTML and JSON from
-// the same ranking the Discord posts use.
-import type { Config } from "./config";
+// The public leaderboard page of a program. Pure functions that build HTML and
+// JSON from the same ranking the Discord posts use.
+import type { Program } from "./config";
 import type { Leaderboard, LeaderboardRow } from "./leaderboard";
+import { programStatus, type ProgramStatus } from "./programs";
 
 export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 }
 
-const day = (d: Date) => d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const day = (d: Date, year = false) =>
+  d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: year ? "numeric" : undefined, timeZone: "UTC" });
 
-/** What a row's status chip says: where the person stands for the reward. */
-export function standing(row: LeaderboardRow, cfg: Config): { text: string; kind: "top" | "qualifies" | "progress" } {
-  const { minPrs, topN } = cfg.leaderboard;
-  if (row.winner) return { text: `In the top ${topN}`, kind: "top" };
-  if (row.qualifies) return { text: "Qualifies", kind: "qualifies" };
-  const missing = minPrs - row.count;
-  return { text: `${missing} more to qualify`, kind: "progress" };
+/** "Oct 1 to Oct 31, 2026 (UTC)". The first date gets its year only when it differs. */
+export function dateRange(start: Date, end: Date): string {
+  const sameYear = start.getUTCFullYear() === end.getUTCFullYear();
+  return `${day(start, !sameYear)} to ${day(end, true)} (UTC)`;
 }
 
-export function leaderboardJson(board: Leaderboard, cfg: Config) {
-  const { title, label, start, end, minPrs, topN, reward, note } = cfg.leaderboard;
+/** The line under the heading that says whether the program is still on. */
+export function statusLine(program: Program, now: Date): { text: string; status: ProgramStatus } {
+  const status = programStatus(program, now);
+  if (status === "upcoming") return { text: `Starts ${day(program.start, true)}`, status };
+  if (status === "ended") return { text: "Ended. These are the final results.", status };
+  const days = Math.ceil((program.end.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+  return { text: `Running now. ${days} ${days === 1 ? "day" : "days"} left.`, status };
+}
+
+export type Chip = { text: string; kind: "top" | "qualifies" | "progress" };
+
+/** What a row's chip says: where the person stands for the reward. Nothing once it's over and they didn't qualify. */
+export function standing(row: LeaderboardRow, program: Program, status: ProgramStatus = "running"): Chip | null {
+  const { minPrs, topN } = program;
+  const ended = status === "ended";
+  if (row.winner) return { text: ended ? "Winner" : `In the top ${topN}`, kind: "top" };
+  if (row.qualifies) return { text: ended ? "Qualified" : "Qualifies", kind: "qualifies" };
+  if (ended) return null;
+  return { text: `${minPrs - row.count} more to qualify`, kind: "progress" };
+}
+
+export function leaderboardJson(board: Leaderboard, program: Program, now: Date) {
+  const { id, title, label, repos, start, end, minPrs, topN, reward, note } = program;
   return {
+    id,
     title: `${title} leaderboard`,
+    status: programStatus(program, now),
     generatedAt: board.generatedAt,
-    rules: { label, start: start.toISOString(), end: end.toISOString(), minPrs, topN, reward, note },
+    rules: { repos, label, start: start.toISOString(), end: end.toISOString(), minPrs, topN, reward, note },
     rows: board.rows.map((row, i) => ({
       rank: i + 1,
       login: row.login,
@@ -62,6 +84,13 @@ h1{font:700 clamp(28px,6vw,40px)/1.15 ui-monospace,SFMono-Regular,Menlo,monospac
 .cta{display:flex;flex-wrap:wrap;gap:10px;margin:0 0 36px}
 .cta a{padding:10px 16px;border-radius:8px;border:1px solid var(--line);background:var(--raise);color:var(--fg);font-weight:600}
 .cta a.primary{background:var(--cyan);border-color:var(--cyan);color:#06120f}
+.status{display:inline-block;font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;padding:7px 11px;border-radius:999px;border:1px solid var(--line);color:var(--muted);margin:0 0 28px}
+.status.running{color:var(--cyan);border-color:var(--cyan)}
+.status.ended{color:var(--gold);border-color:var(--gold)}
+.lede{margin-bottom:14px}
+.others{margin:0 0 36px}
+.others h2{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.others ul{margin:0;padding-left:18px}
 footer{color:var(--muted);font-size:13px}
 @media (max-width:520px){.chip{display:none}}
 `;
@@ -70,15 +99,19 @@ export interface PageLinks {
   /** Where to find an issue to work on. */
   issues: string;
   discord: string;
-  /** The page's own public URL, for share previews. */
+  /** The page's own permanent URL, for share previews. */
   self: string;
+  /** The other programs, each with the path of its page. */
+  others: { title: string; path: string }[];
 }
 
-export function leaderboardPage(board: Leaderboard, cfg: Config, links: PageLinks): string {
-  const { title, label, start, end, minPrs, topN, reward, note } = cfg.leaderboard;
+export function leaderboardPage(board: Leaderboard, program: Program, links: PageLinks, now: Date): string {
+  const { title, label, start, end, minPrs, topN, reward, note } = program;
   const heading = `${title} leaderboard`;
-  const repos = cfg.repos.join(", ").replace(/, ([^,]*)$/, " and $1");
-  const description = `Merged pull requests in ${repos}, ${day(start)} to ${day(end)} (UTC). The top ${topN} with at least ${minPrs} get ${reward}.`;
+  const repos = program.repos.join(", ").replace(/, ([^,]*)$/, " and $1");
+  const when = dateRange(start, end);
+  const state = statusLine(program, now);
+  const description = `Merged pull requests in ${repos}, ${when}. The top ${topN} with at least ${minPrs} get ${reward}.`;
   const ogImage = `https://og.codercops.com/api/og?${new URLSearchParams({
     template: "github-readme-hero",
     title: heading,
@@ -88,8 +121,9 @@ export function leaderboardPage(board: Leaderboard, cfg: Config, links: PageLink
   const rows = board.rows
     .map((row, i) => {
       const login = escapeHtml(row.login);
-      const chip = standing(row, cfg);
-      return `<li><span class="rank">${i + 1}</span><img src="https://github.com/${encodeURIComponent(row.login)}.png?size=72" alt="" width="36" height="36" loading="lazy"><span class="who"><a href="https://github.com/${encodeURIComponent(row.login)}">${login}</a></span><span class="count">${row.count} merged ${row.count === 1 ? "PR" : "PRs"}</span><span class="chip ${chip.kind}">${escapeHtml(chip.text)}</span></li>`;
+      const chip = standing(row, program, state.status);
+      const chipHtml = chip ? `<span class="chip ${chip.kind}">${escapeHtml(chip.text)}</span>` : "";
+      return `<li><span class="rank">${i + 1}</span><img src="https://github.com/${encodeURIComponent(row.login)}.png?size=72" alt="" width="36" height="36" loading="lazy"><span class="who"><a href="https://github.com/${encodeURIComponent(row.login)}">${login}</a></span><span class="count">${row.count} merged ${row.count === 1 ? "PR" : "PRs"}</span>${chipHtml}</li>`;
     })
     .join("\n");
 
@@ -104,15 +138,17 @@ export function leaderboardPage(board: Leaderboard, cfg: Config, links: PageLink
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:image" content="${escapeHtml(ogImage)}">
 <meta property="og:url" content="${escapeHtml(links.self)}">
+<link rel="canonical" href="${escapeHtml(links.self)}">
 <meta name="twitter:card" content="summary_large_image">
 <style>${STYLE}</style>
 </head>
 <body>
 <main>
-<p class="eyebrow">CODERCOPS open source</p>
+<p class="eyebrow">CODERCOPS open source program</p>
 <h1>${escapeHtml(heading)}</h1>
-<p class="lede">Merged pull requests in ${escapeHtml(repos)}, ${day(start)} to ${day(end)} (UTC).</p>
-${board.rows.length ? `<ol class="board">\n${rows}\n</ol>` : `<div class="board"><p class="empty">No merged pull requests counted yet. Pick an issue and be the first.</p></div>`}
+<p class="lede">Merged pull requests in ${escapeHtml(repos)}, ${when}.</p>
+<p class="status ${state.status}">${escapeHtml(state.text)}</p>
+${board.rows.length ? `<ol class="board">\n${rows}\n</ol>` : `<div class="board"><p class="empty">${state.status === "ended" ? "No merged pull requests were counted." : "No merged pull requests counted yet. Pick an issue and be the first."}</p></div>`}
 <section class="rules">
 <h2>How it works</h2>
 <p>A pull request counts when it's merged into one of the repos above during the window and carries the <code>${escapeHtml(label)}</code> label. Only PRs for issues that were assigned to you count.</p>
@@ -124,7 +160,8 @@ ${note ? `<p>${escapeHtml(note)}</p>` : ""}
 <a href="${escapeHtml(links.discord)}">Join the Discord</a>
 <a href="https://www.codercops.com">Hire developers or get hired</a>
 </div>
-<footer>Updated <time datetime="${escapeHtml(board.generatedAt)}">${escapeHtml(board.generatedAt.slice(0, 16).replace("T", " "))} UTC</time>. Refreshes every few minutes. <a href="/leaderboard.json">JSON</a></footer>
+${links.others.length ? `<section class="others">\n<h2>Other programs</h2>\n<ul>\n${links.others.map((o) => `<li><a href="${escapeHtml(o.path)}">${escapeHtml(o.title)}</a></li>`).join("\n")}\n</ul>\n</section>` : ""}
+<footer>Updated <time datetime="${escapeHtml(board.generatedAt)}">${escapeHtml(board.generatedAt.slice(0, 16).replace("T", " "))} UTC</time>. Refreshes every few minutes. <a href="/leaderboard/${escapeHtml(program.id)}.json">JSON</a></footer>
 </main>
 </body>
 </html>`;

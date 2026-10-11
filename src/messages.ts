@@ -1,7 +1,7 @@
 // Pure functions that turn GitHub data into Discord messages. No I/O here, so
 // everything in this file is easy to unit test.
 import type { CheckinRecord, CheckinResult } from "./checkin";
-import type { Config, Roadmap } from "./config";
+import type { Config, Program, Roadmap } from "./config";
 import type { Embed, MessagePayload } from "./discord";
 import type { StarterIssue } from "./github";
 import type { Leaderboard } from "./leaderboard";
@@ -73,8 +73,19 @@ export function mergedPrMessage(
   return { embeds: [{ description, color: COLOR.merged }] };
 }
 
-export function leaderboardMessage(board: Leaderboard, cfg: Config, opts: { final?: boolean; limit?: number } = {}): MessagePayload {
-  const { title, minPrs, topN, reward, label, note } = cfg.leaderboard;
+export function leaderboardMessage(
+  board: Leaderboard,
+  program: Program,
+  opts: {
+    final?: boolean;
+    limit?: number;
+    /** The program's public page. */
+    url?: string;
+    /** Extra line for the final results. */
+    finalNote?: string;
+  } = {}
+): MessagePayload {
+  const { title, minPrs, topN, reward, label, note } = program;
   const shown = board.rows.slice(0, opts.limit ?? 10);
   const lines = shown.map((row, i) => {
     const prs = `${row.count} merged ${row.count === 1 ? "PR" : "PRs"}`;
@@ -93,11 +104,14 @@ export function leaderboardMessage(board: Leaderboard, cfg: Config, opts: { fina
         winners.length > 0
           ? `\n\nCongratulations to ${winners.map((w) => `**${escapeMarkdown(w.login)}**`).join(", ")}. We'll reach out on GitHub to send you ${reward}.`
           : `\n\nNobody reached ${minPrs} merged PRs this time. Thank you to everyone who contributed.`;
+      if (opts.finalNote) description += `\n\n${opts.finalNote}`;
     }
   }
+  if (opts.url) description = `${truncate(description, 3800)}\n\n[Full leaderboard and rules](${opts.url})`;
 
   const embed: Embed = {
     title: opts.final ? `${title} leaderboard: final results` : `${title} leaderboard`,
+    url: opts.url,
     description: truncate(description, 4000),
     color: COLOR.gold,
     footer: {

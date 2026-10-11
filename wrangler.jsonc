@@ -5,9 +5,10 @@
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
   "triggers": {
-    // Mondays 04:30 UTC (10:00 IST): weekly leaderboard.
-    // Nov 1 04:30 UTC: final results. Keep in sync with FINAL_RESULTS_CRON in src/index.ts.
-    "crons": ["30 4 * * 1", "30 4 1 11 *"]
+    // Every day at 04:30 UTC (10:00 IST). On Mondays it posts the leaderboards
+    // and the learning streaks; on any day it posts the final results of a
+    // program that has just ended. Keep in sync with DAILY_CRON in src/index.ts.
+    "crons": ["30 4 * * *"]
   },
   "kv_namespaces": [{ "binding": "STATE", "id": "a930275781aa44f682ebe9a201d217c7" }],
   "vars": {
@@ -18,20 +19,35 @@
     "CHANNEL_MERGED_PRS": "1558894551006056538",
     "CHANNEL_LEADERBOARD": "1438503873064210432",
     "GITHUB_ORG": "codercops",
-    "REPOS": "chatcops,ogcops,toolbelt",
+    "REPOS": "chatcops,ogcops,toolbelt,discord-bot",
     "STARTER_LABELS": "good first issue,help wanted",
     // Maintainers: no shoutouts and no leaderboard rows for these GitHub logins.
     "EXCLUDED_USERS": "anurag629",
-    "LEADERBOARD_TITLE": "CODERCOPS October 2026",
-    "LEADERBOARD_LABEL": "hacktoberfest-accepted",
-    "LEADERBOARD_START": "2026-10-01T00:00:00Z",
-    "LEADERBOARD_END": "2026-10-31T23:59:59Z",
-    "LEADERBOARD_MIN_PRS": "5",
-    "LEADERBOARD_TOP_N": "5",
-    "LEADERBOARD_REWARD": "a CODERCOPS T-shirt and stickers",
-    // The reward is ours, not Hacktoberfest's. Say so wherever the leaderboard is shown.
-    "LEADERBOARD_NOTE": "This swag comes from CODERCOPS's own open source program. It is separate from Hacktoberfest and its rewards.",
-    // Links on the public leaderboard page (/leaderboard).
+    // Contributor programs. Each one counts merged PRs that carry `label`, in
+    // `repos` (default: every repo in REPOS), merged between `start` and `end`,
+    // and has its own page at /leaderboard/{id}. To run another one, add it
+    // here; the old ones stay online. `kind` is "merged-prs", the only kind
+    // there is so far.
+    "PROGRAMS": [
+      {
+        "id": "2026-10",
+        "title": "CODERCOPS October 2026",
+        "kind": "merged-prs",
+        "label": "hacktoberfest-accepted",
+        "start": "2026-10-01T00:00:00Z",
+        "end": "2026-10-31T23:59:59Z",
+        "minPrs": 5,
+        "topN": 5,
+        "reward": "a CODERCOPS T-shirt and stickers",
+        // The reward is ours, not Hacktoberfest's. Say so wherever the leaderboard is shown.
+        "note": "This swag comes from CODERCOPS's own open source program. It is separate from Hacktoberfest and its rewards."
+      }
+    ],
+    // Added to a program's final results post.
+    "FINAL_RESULTS_NOTE": "Got a PR merged? That's a project for your CODERCOPS profile. Add your GitHub handle or the repo link at <https://app.codercops.com/signup>. Profiles are free.",
+    // Where this Worker is reachable. Used for links in Discord messages.
+    "PUBLIC_URL": "https://codercops-discord-bot.copscoder.workers.dev",
+    // Links on the public leaderboard pages.
     "DISCORD_INVITE": "https://discord.gg/mpGdJyjaRQ",
     "ISSUES_URL": "https://github.com/search?q=org%3Acodercops+label%3Ahacktoberfest+state%3Aopen+no%3Aassignee&type=issues",
     // Learning roadmaps for /checkin. `forum` is the forum channel that holds

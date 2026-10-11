@@ -1,4 +1,4 @@
-import type { Config, Env } from "./config";
+import type { Config, Env, Program } from "./config";
 import { searchMergedPrs } from "./github";
 
 export interface MergedPr {
@@ -56,7 +56,7 @@ export function rankContributors(prs: MergedPr[], opts: RankOptions): Leaderboar
   });
 }
 
-const CACHE_KEY = "leaderboard:v1";
+const cacheKey = (program: Program) => `leaderboard:v2:${program.id}`;
 const CACHE_TTL_SECONDS = 600;
 
 export interface Leaderboard {
@@ -64,25 +64,30 @@ export interface Leaderboard {
   generatedAt: string;
 }
 
-/** The current leaderboard, cached in KV for a few minutes to stay inside GitHub's search rate limit. */
-export async function getLeaderboard(env: Env, cfg: Config, opts: { fresh?: boolean } = {}): Promise<Leaderboard> {
+/** A program's leaderboard, cached in KV for a few minutes to stay inside GitHub's search rate limit. */
+export async function getLeaderboard(
+  env: Env,
+  cfg: Config,
+  program: Program,
+  opts: { fresh?: boolean } = {}
+): Promise<Leaderboard> {
   if (!opts.fresh) {
-    const cached = await env.STATE.get<Leaderboard>(CACHE_KEY, "json");
+    const cached = await env.STATE.get<Leaderboard>(cacheKey(program), "json");
     if (cached) return cached;
   }
-  const prs = await searchMergedPrs(env, cfg);
+  const prs = await searchMergedPrs(env, cfg, program);
   const board: Leaderboard = {
     rows: rankContributors(prs, {
       excludedUsers: cfg.excludedUsers,
-      minPrs: cfg.leaderboard.minPrs,
-      topN: cfg.leaderboard.topN,
+      minPrs: program.minPrs,
+      topN: program.topN,
     }),
     generatedAt: new Date().toISOString(),
   };
-  await env.STATE.put(CACHE_KEY, JSON.stringify(board), { expirationTtl: CACHE_TTL_SECONDS });
+  await env.STATE.put(cacheKey(program), JSON.stringify(board), { expirationTtl: CACHE_TTL_SECONDS });
   return board;
 }
 
-export async function invalidateLeaderboard(env: Env): Promise<void> {
-  await env.STATE.delete(CACHE_KEY);
+export async function invalidateLeaderboard(env: Env, program: Program): Promise<void> {
+  await env.STATE.delete(cacheKey(program));
 }

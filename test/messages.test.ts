@@ -10,7 +10,7 @@ import {
   starterIssuesReply,
   truncate,
 } from "../src/messages";
-import { makeEnv } from "./helpers";
+import { makeEnv, OCTOBER } from "./helpers";
 
 const cfg = getConfig(makeEnv());
 
@@ -90,8 +90,10 @@ describe("leaderboardMessage", () => {
   const row = (login: string, count: number, qualifies = false, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", qualifies, winner });
   const board = { generatedAt: "2026-10-12T04:30:00.000Z", rows: [row("ada", 6, true, true), row("bob", 2), row("cy", 1)] };
 
+  const program = cfg.programs[0]!;
+
   it("lists people in order and marks who is in the running", () => {
-    const embed = leaderboardMessage(board, cfg).embeds?.[0];
+    const embed = leaderboardMessage(board, program).embeds?.[0];
     expect(embed?.title).toBe("Hacktoberfest 2026 leaderboard");
     expect(embed?.description).toBe("1. **ada** · 6 merged PRs · in the top 5\n2. **bob** · 2 merged PRs\n3. **cy** · 1 merged PR");
     expect(embed?.footer?.text).toContain("at least 5 merged PRs labeled hacktoberfest-accepted");
@@ -101,21 +103,35 @@ describe("leaderboardMessage", () => {
   });
 
   it("leaves the footer note out when none is configured", () => {
-    const plain = getConfig(makeEnv({ LEADERBOARD_NOTE: undefined }));
+    const plain = getConfig(makeEnv({ PROGRAMS: [{ ...OCTOBER, note: undefined }] })).programs[0]!;
     expect(leaderboardMessage(board, plain).embeds?.[0]?.footer?.text?.endsWith("Ties go to whoever got there first.")).toBe(true);
   });
 
+  it("links to the program's page when it has one", () => {
+    const url = "https://bot.example/leaderboard/2026-10";
+    const embed = leaderboardMessage(board, program, { url }).embeds?.[0];
+    expect(embed?.url).toBe(url);
+    expect(embed?.description?.endsWith(`\n\n[Full leaderboard and rules](${url})`)).toBe(true);
+    expect(leaderboardMessage(board, program).embeds?.[0]?.description).not.toContain("Full leaderboard");
+  });
+
   it("announces winners in the final results", () => {
-    const embed = leaderboardMessage(board, cfg, { final: true }).embeds?.[0];
+    const embed = leaderboardMessage(board, program, { final: true }).embeds?.[0];
     expect(embed?.title).toBe("Hacktoberfest 2026 leaderboard: final results");
     expect(embed?.description).toContain("1. **ada** · 6 merged PRs · winner");
     expect(embed?.description).toContain("Congratulations to **ada**. We'll reach out on GitHub to send you a CODERCOPS T-shirt and stickers.");
   });
 
+  it("adds the final note to the final results only", () => {
+    const finalNote = "Add it to your profile.";
+    expect(leaderboardMessage(board, program, { final: true, finalNote }).embeds?.[0]?.description?.endsWith("\n\nAdd it to your profile.")).toBe(true);
+    expect(leaderboardMessage(board, program, { finalNote }).embeds?.[0]?.description).not.toContain("Add it to your profile.");
+  });
+
   it("handles a final result with no qualifiers and an empty board", () => {
-    const none = leaderboardMessage({ ...board, rows: [row("bob", 2)] }, cfg, { final: true }).embeds?.[0];
+    const none = leaderboardMessage({ ...board, rows: [row("bob", 2)] }, program, { final: true }).embeds?.[0];
     expect(none?.description).toContain("Nobody reached 5 merged PRs");
-    const empty = leaderboardMessage({ ...board, rows: [] }, cfg).embeds?.[0];
+    const empty = leaderboardMessage({ ...board, rows: [] }, program).embeds?.[0];
     expect(empty?.description).toContain("No merged PRs counted yet");
   });
 });

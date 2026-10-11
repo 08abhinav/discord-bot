@@ -1,4 +1,4 @@
-import type { Config, Env } from "./config";
+import type { Config, Env, Program } from "./config";
 import type { MergedPr } from "./leaderboard";
 
 export class GithubError extends Error {
@@ -67,16 +67,16 @@ interface SearchResult {
   items: { html_url: string; user: { login: string } | null; pull_request?: { merged_at: string | null } }[];
 }
 
-/** Every merged PR that counts for the leaderboard: labeled, in our repos, merged inside the window. */
-export async function searchMergedPrs(env: Env, cfg: Config): Promise<MergedPr[]> {
-  const { label, start, end } = cfg.leaderboard;
+/** Every merged PR that counts for a program: labeled, in its repos, merged inside its window. */
+export async function searchMergedPrs(env: Env, cfg: Config, program: Program): Promise<MergedPr[]> {
+  const { label, start, end } = program;
   const iso = (d: Date) => d.toISOString().replace(/\.\d{3}Z$/, "Z");
   const q = [
     "is:pr",
     "is:merged",
     `label:"${label}"`,
     `merged:${iso(start)}..${iso(end)}`,
-    ...cfg.repos.map((r) => `repo:${cfg.org}/${r}`),
+    ...program.repos.map((r) => `repo:${cfg.org}/${r}`),
   ].join(" ");
 
   const prs: MergedPr[] = [];

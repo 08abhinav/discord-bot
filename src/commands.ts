@@ -6,6 +6,7 @@ import type { MessagePayload } from "./discord";
 import { GithubError, listStarterIssues } from "./github";
 import { getLeaderboard } from "./leaderboard";
 import { checkinReply, leaderboardMessage, starterIssuesReply, streaksMessage } from "./messages";
+import { currentProgram, findProgram, leaderboardUrl, programStatus } from "./programs";
 
 export interface CommandData {
   name: string;
@@ -55,8 +56,14 @@ export async function runCommand(
         );
         return starterIssuesReply(cfg, issuesByRepo);
       }
-      case "leaderboard":
-        return leaderboardMessage(await getLeaderboard(env, cfg), cfg);
+      case "leaderboard": {
+        const program = findProgram(cfg, option("program")) ?? currentProgram(cfg, now);
+        if (!program) return { content: "There's no contributor program right now." };
+        return leaderboardMessage(await getLeaderboard(env, cfg, program), program, {
+          final: programStatus(program, now) === "ended",
+          url: leaderboardUrl(cfg, program),
+        });
+      }
       default:
         return { content: "I don't know that command." };
     }

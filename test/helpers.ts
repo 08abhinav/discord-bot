@@ -25,6 +25,19 @@ export const ROADMAPS = [
   { id: "gen-ai-21", name: "Gen AI Engineer in 3 Weeks", days: 21, url: "https://example.com/genai", forum: "forum-logs", tag: "tag-genai" },
 ];
 
+export const OCTOBER = {
+  id: "2026-10",
+  title: "Hacktoberfest 2026",
+  kind: "merged-prs",
+  label: "hacktoberfest-accepted",
+  start: "2026-10-01T00:00:00Z",
+  end: "2026-10-31T23:59:59Z",
+  minPrs: 5,
+  topN: 5,
+  reward: "a CODERCOPS T-shirt and stickers",
+  note: "This swag comes from CODERCOPS, separate from Hacktoberfest.",
+};
+
 export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & KVNamespace } {
   return {
     STATE: new FakeKV() as unknown as FakeKV & KVNamespace,
@@ -40,14 +53,8 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & K
     REPOS: "chatcops,ogcops,toolbelt",
     STARTER_LABELS: "good first issue,help wanted",
     EXCLUDED_USERS: "anurag629",
-    LEADERBOARD_TITLE: "Hacktoberfest 2026",
-    LEADERBOARD_LABEL: "hacktoberfest-accepted",
-    LEADERBOARD_START: "2026-10-01T00:00:00Z",
-    LEADERBOARD_END: "2026-10-31T23:59:59Z",
-    LEADERBOARD_MIN_PRS: "5",
-    LEADERBOARD_TOP_N: "5",
-    LEADERBOARD_REWARD: "a CODERCOPS T-shirt and stickers",
-    LEADERBOARD_NOTE: "This swag comes from CODERCOPS, separate from Hacktoberfest.",
+    PROGRAMS: [OCTOBER],
+    PUBLIC_URL: "https://bot.example",
     ROADMAPS,
     CHECKIN_UTC_OFFSET_MINUTES: "330",
     DISCORD_INVITE: "https://discord.gg/example",

@@ -15,7 +15,7 @@ if (!token || !guildId) {
 
 // wrangler.jsonc allows comments, so strip them before parsing.
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
-const { DISCORD_APPLICATION_ID: appId, REPOS, ROADMAPS } = config.vars;
+const { DISCORD_APPLICATION_ID: appId, REPOS, ROADMAPS, PROGRAMS } = config.vars;
 const repos = REPOS.split(',').map((r) => r.trim());
 const longestRoadmap = Math.max(...ROADMAPS.map((r) => r.days));
 
@@ -33,7 +33,19 @@ const commands = [
       },
     ],
   },
-  { name: 'leaderboard', description: 'Show who has the most merged PRs this event' },
+  {
+    name: 'leaderboard',
+    description: 'Show who has the most merged PRs in a contributor program',
+    options: [
+      {
+        type: 3,
+        name: 'program',
+        description: 'Which program (default: the current one)',
+        required: false,
+        choices: PROGRAMS.map((p) => ({ name: p.title, value: p.id })),
+      },
+    ],
+  },
   {
     name: 'checkin',
     description: 'Log today on a learning roadmap and keep your streak alive',

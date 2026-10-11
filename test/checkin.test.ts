@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { applyCheckin, currentStreak, daysBetween, localDate, rankStreaks, type CheckinRecord } from "../src/checkin";
 import { runCommand } from "../src/commands";
 import { getConfig } from "../src/config";
-import worker from "../src/index";
+import worker, { DAILY_CRON } from "../src/index";
 import { checkinPost, streaksMessage } from "../src/messages";
 import { makeEnv, mockFetch, ROADMAPS } from "./helpers";
 
@@ -233,9 +233,9 @@ describe("/checkin", () => {
 
 describe("weekly streak board", () => {
   const run = (env: ReturnType<typeof makeEnv>, when: string) =>
-    worker.scheduled({ cron: "30 4 * * 1", scheduledTime: Date.parse(when), noRetry() {} } as ScheduledController, env);
+    worker.scheduled({ cron: DAILY_CRON, scheduledTime: Date.parse(when), noRetry() {} } as ScheduledController, env);
 
-  it("is posted with the weekly cron when someone checked in during the past week", async () => {
+  it("is posted on Mondays when someone checked in during the past week", async () => {
     const env = makeEnv();
     mockFetch();
     await runCommand({ name: "checkin", options: [{ name: "roadmap", value: ai.id }] }, { id: "u1", name: "Ada" }, env, getConfig(env), new Date("2026-11-20T08:00:00Z"));
@@ -245,6 +245,11 @@ describe("weekly streak board", () => {
     expect(fetched.discord()).toHaveLength(1);
     expect(fetched.discord()[0]?.url).toBe("https://discord.com/api/v10/channels/chan-leaderboard/messages");
     expect(fetched.discord()[0]?.body.embeds[0].title).toBe("100 Days of AI Engineer");
+
+    // The cron runs every day, but the board is a weekly post.
+    fetched.clear();
+    await run(env, "2026-11-24T04:30:00Z");
+    expect(fetched.discord()).toHaveLength(0);
   });
 
   it("stays quiet when nobody checked in recently", async () => {

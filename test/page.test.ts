@@ -1,25 +1,73 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getConfig } from "../src/config";
 import worker from "../src/index";
-import { escapeHtml, leaderboardJson, leaderboardPage, standing } from "../src/page";
-import { makeEnv, mockFetch } from "./helpers";
+import { dateRange, escapeHtml, leaderboardJson, leaderboardPage, standing, statusLine } from "../src/page";
+import { currentProgram } from "../src/programs";
+import { makeEnv, mockFetch, OCTOBER } from "./helpers";
 
-const cfg = getConfig(makeEnv());
+const program = getConfig(makeEnv()).programs[0]!;
+const during = new Date("2026-10-12T04:30:00Z");
+const after = new Date("2026-11-03T00:00:00Z");
 const row = (login: string, count: number, qualifies = false, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", qualifies, winner });
 const board = { generatedAt: "2026-10-12T04:30:00.000Z", rows: [row("ada", 6, true, true), row("bob", 5, true, false), row("cy", 2), row("dee", 4)] };
-const links = { issues: "https://github.com/search?q=x&type=issues", discord: "https://discord.gg/example", self: "https://bot.example/leaderboard" };
+const links = {
+  issues: "https://github.com/search?q=x&type=issues",
+  discord: "https://discord.gg/example",
+  self: "https://bot.example/leaderboard/2026-10",
+  others: [] as { title: string; path: string }[],
+};
 
 describe("standing", () => {
   it("says where each person is for the reward", () => {
-    expect(standing(board.rows[0]!, cfg)).toEqual({ text: "In the top 5", kind: "top" });
-    expect(standing(board.rows[1]!, cfg)).toEqual({ text: "Qualifies", kind: "qualifies" });
-    expect(standing(board.rows[2]!, cfg)).toEqual({ text: "3 more to qualify", kind: "progress" });
-    expect(standing(board.rows[3]!, cfg)).toEqual({ text: "1 more to qualify", kind: "progress" });
+    expect(standing(board.rows[0]!, program)).toEqual({ text: "In the top 5", kind: "top" });
+    expect(standing(board.rows[1]!, program)).toEqual({ text: "Qualifies", kind: "qualifies" });
+    expect(standing(board.rows[2]!, program)).toEqual({ text: "3 more to qualify", kind: "progress" });
+    expect(standing(board.rows[3]!, program)).toEqual({ text: "1 more to qualify", kind: "progress" });
+  });
+
+  it("names winners once the program is over and drops the countdown", () => {
+    expect(standing(board.rows[0]!, program, "ended")).toEqual({ text: "Winner", kind: "top" });
+    expect(standing(board.rows[1]!, program, "ended")).toEqual({ text: "Qualified", kind: "qualifies" });
+    expect(standing(board.rows[2]!, program, "ended")).toBeNull();
+  });
+});
+
+describe("dates and status", () => {
+  it("writes the window with its year", () => {
+    expect(dateRange(program.start, program.end)).toBe("Oct 1 to Oct 31, 2026 (UTC)");
+    expect(dateRange(new Date("2026-12-15T00:00:00Z"), new Date("2027-01-15T00:00:00Z"))).toBe("Dec 15, 2026 to Jan 15, 2027 (UTC)");
+  });
+
+  it("says whether the program is still on", () => {
+    expect(statusLine(program, new Date("2026-09-01T00:00:00Z"))).toEqual({ text: "Starts Oct 1, 2026", status: "upcoming" });
+    expect(statusLine(program, during)).toEqual({ text: "Running now. 20 days left.", status: "running" });
+    expect(statusLine(program, new Date("2026-10-31T12:00:00Z"))).toEqual({ text: "Running now. 1 day left.", status: "running" });
+    expect(statusLine(program, after)).toEqual({ text: "Ended. These are the final results.", status: "ended" });
+  });
+});
+
+describe("currentProgram", () => {
+  const november = { ...OCTOBER, id: "2026-11", title: "November sprint", start: "2026-11-01T00:00:00Z", end: "2026-11-30T23:59:59Z" };
+  const cfg = getConfig(makeEnv({ PROGRAMS: [november, OCTOBER] }));
+  const at = (iso: string) => currentProgram(cfg, new Date(iso))?.id;
+
+  it("prefers the running program, then the last one that ended, then the next one", () => {
+    expect(cfg.programs.map((p) => p.id)).toEqual(["2026-10", "2026-11"]);
+    expect(at("2026-09-01T00:00:00Z")).toBe("2026-10");
+    expect(at("2026-10-15T00:00:00Z")).toBe("2026-10");
+    expect(at("2026-11-15T00:00:00Z")).toBe("2026-11");
+    expect(at("2027-03-01T00:00:00Z")).toBe("2026-11");
+  });
+
+  it("skips programs of a kind the bot can't count yet", () => {
+    const mixed = getConfig(makeEnv({ PROGRAMS: [OCTOBER, { ...november, kind: "volunteers" }] }));
+    expect(mixed.programs.map((p) => p.id)).toEqual(["2026-10"]);
+    expect(currentProgram(getConfig(makeEnv({ PROGRAMS: [] })), during)).toBeUndefined();
   });
 });
 
 describe("leaderboardPage", () => {
-  const html = leaderboardPage(board, cfg, links);
+  const html = leaderboardPage(board, program, links, during);
 
   it("lists people in order with their counts and links to their profiles", () => {
     expect(html).toContain("<h1>Hacktoberfest 2026 leaderboard</h1>");
@@ -31,7 +79,8 @@ describe("leaderboardPage", () => {
   });
 
   it("states the rules, the window and who the reward comes from", () => {
-    expect(html).toContain("Merged pull requests in chatcops, ogcops and toolbelt, Oct 1 to Oct 31 (UTC).");
+    expect(html).toContain("Merged pull requests in chatcops, ogcops and toolbelt, Oct 1 to Oct 31, 2026 (UTC).");
+    expect(html).toContain('<p class="status running">Running now. 20 days left.</p>');
     expect(html).toContain("at least 5 merged PRs get a CODERCOPS T-shirt and stickers");
     expect(html).toContain("Only PRs for issues that were assigned to you count.");
     expect(html).toContain("This swag comes from CODERCOPS, separate from Hacktoberfest.");
@@ -45,20 +94,35 @@ describe("leaderboardPage", () => {
 
   it("escapes anything that isn't ours", () => {
     expect(escapeHtml(`<img src=x onerror="a('b')">&`)).toBe("&lt;img src=x onerror=&quot;a(&#39;b&#39;)&quot;&gt;&amp;");
-    const evil = leaderboardPage({ ...board, rows: [row('"><script>alert(1)</script>', 1)] }, cfg, links);
+    const evil = leaderboardPage({ ...board, rows: [row('"><script>alert(1)</script>', 1)] }, program, links, during);
     expect(evil).not.toContain("<script>");
     expect(evil).toContain("&lt;script&gt;");
   });
 
   it("has an empty state", () => {
-    expect(leaderboardPage({ ...board, rows: [] }, cfg, links)).toContain("No merged pull requests counted yet");
+    expect(leaderboardPage({ ...board, rows: [] }, program, links, during)).toContain("No merged pull requests counted yet");
+  });
+
+  it("shows final results once the program is over", () => {
+    const ended = leaderboardPage(board, program, links, after);
+    expect(ended).toContain('<p class="status ended">Ended. These are the final results.</p>');
+    expect(ended).toContain('<span class="chip top">Winner</span>');
+    expect(ended).not.toContain("more to qualify");
+  });
+
+  it("links to the other programs and to its own JSON", () => {
+    expect(html).not.toContain("Other programs");
+    expect(html).toContain('<a href="/leaderboard/2026-10.json">JSON</a>');
+    expect(html).toContain('<link rel="canonical" href="https://bot.example/leaderboard/2026-10">');
+    const many = leaderboardPage(board, program, { ...links, others: [{ title: "November sprint", path: "/leaderboard/2026-11" }] }, during);
+    expect(many).toContain('<li><a href="/leaderboard/2026-11">November sprint</a></li>');
   });
 });
 
 describe("leaderboardJson", () => {
   it("returns ranks, counts and the rules", () => {
-    const json = leaderboardJson(board, cfg);
-    expect(json.title).toBe("Hacktoberfest 2026 leaderboard");
+    const json = leaderboardJson(board, program, during);
+    expect(json).toMatchObject({ id: "2026-10", title: "Hacktoberfest 2026 leaderboard", status: "running" });
     expect(json.rows[0]).toEqual({ rank: 1, login: "ada", mergedPrs: 6, qualifies: true, inTop: true });
     expect(json.rules).toMatchObject({ minPrs: 5, topN: 5, label: "hacktoberfest-accepted", start: "2026-10-01T00:00:00.000Z" });
   });
@@ -87,7 +151,7 @@ describe("GET /leaderboard", () => {
     const html = await res.text();
     expect(html).toContain(">ada<");
     expect(html).not.toContain("anurag629");
-    expect(html).toContain('content="https://bot.example/leaderboard"');
+    expect(html).toContain('content="https://bot.example/leaderboard/2026-10"');
 
     await worker.fetch(new Request("https://bot.example/leaderboard"), env, ctx);
     expect(fetched.calls.filter((c) => c.url.includes("api.github.com"))).toHaveLength(1);
@@ -98,6 +162,34 @@ describe("GET /leaderboard", () => {
     const res = await worker.fetch(new Request("https://bot.example/leaderboard.json"), env, ctx);
     expect(res.headers.get("Access-Control-Allow-Origin")).toBe("*");
     expect(((await res.json()) as { rows: unknown[] }).rows).toHaveLength(1);
+  });
+
+  it("gives every program a permanent address and 404s unknown ones", async () => {
+    mockFetch(search);
+    const page = await worker.fetch(new Request("https://bot.example/leaderboard/2026-10"), env, ctx);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("<h1>Hacktoberfest 2026 leaderboard</h1>");
+    const json = await worker.fetch(new Request("https://bot.example/leaderboard/2026-10.json"), env, ctx);
+    expect(((await json.json()) as { id: string }).id).toBe("2026-10");
+
+    expect((await worker.fetch(new Request("https://bot.example/leaderboard/2025-10"), env, ctx)).status).toBe(404);
+    expect((await worker.fetch(new Request("https://bot.example/leaderboard/"), env, ctx)).status).toBe(404);
+    expect((await worker.fetch(new Request("https://bot.example/leaderboard", { method: "POST" }), env, ctx)).status).toBe(404);
+    const none = await worker.fetch(new Request("https://bot.example/leaderboard"), makeEnv({ PROGRAMS: [] }), ctx);
+    expect(none.status).toBe(404);
+  });
+
+  it("keeps a separate cache per program", async () => {
+    const november = { ...OCTOBER, id: "2026-11", title: "November sprint", start: "2026-11-01T00:00:00Z", end: "2026-11-30T23:59:59Z" };
+    env = makeEnv({ PROGRAMS: [OCTOBER, november] });
+    const fetched = mockFetch(search);
+    const oct = await worker.fetch(new Request("https://bot.example/leaderboard/2026-10"), env, ctx);
+    const nov = await worker.fetch(new Request("https://bot.example/leaderboard/2026-11"), env, ctx);
+    expect(await oct.text()).toContain('<li><a href="/leaderboard/2026-11">November sprint</a></li>');
+    expect(await nov.text()).toContain("<h1>November sprint leaderboard</h1>");
+    const searches = fetched.calls.filter((c) => c.url.includes("api.github.com"));
+    expect(searches).toHaveLength(2);
+    expect(decodeURIComponent(searches[1]!.url)).toContain("merged:2026-11-01T00:00:00Z..2026-11-30T23:59:59Z");
   });
 
   it("answers 503 when GitHub is rate limiting", async () => {
