@@ -1,6 +1,6 @@
 import { listCheckins, localDate, rankStreaks } from "./checkin";
 import { runCommand, type CommandData, type CommandUser } from "./commands";
-import { getConfig, type Config, type Env } from "./config";
+import { DAILY_CRON, getConfig, WELCOME_CRON, type Config, type Env } from "./config";
 import { editInteractionReply, sendMessage } from "./discord";
 import { getLeaderboard } from "./leaderboard";
 import { GithubError } from "./github";
@@ -24,10 +24,6 @@ const PONG = 1;
 const DEFERRED_CHANNEL_MESSAGE = 5;
 const EPHEMERAL = 64;
 
-/** The cron for the leaderboard and streak posts. Must match wrangler.jsonc. */
-export const DAILY_CRON = "30 4 * * *";
-/** The cron that looks for new members to welcome. Must match wrangler.jsonc. */
-export const WELCOME_CRON = "* * * * *";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 

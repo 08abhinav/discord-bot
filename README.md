@@ -118,7 +118,7 @@ npm test
 
 The tests don't need Discord, GitHub or Cloudflare. They replace `fetch` and KV with small fakes from `test/helpers.ts`.
 
-To try the Worker locally, put your own secrets in `.dev.vars` (it's gitignored) and run `npm run dev`:
+`npm run dev` runs the Worker locally. The leaderboard pages work right away at `http://localhost:8787/leaderboard`. For the Discord and GitHub endpoints, put your own secrets in `.dev.vars` (it's gitignored):
 
 ```
 DISCORD_BOT_TOKEN=...

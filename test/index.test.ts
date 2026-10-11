@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import worker, { DAILY_CRON } from "../src/index";
+import { DAILY_CRON } from "../src/config";
+import worker from "../src/index";
 import { makeEnv, mockFetch, OCTOBER } from "./helpers";
 
 const toHex = (buf: ArrayBuffer) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");

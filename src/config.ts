@@ -126,6 +126,13 @@ export interface Config {
   checkinUtcOffsetMinutes: number;
 }
 
+// The cron expressions in wrangler.jsonc. They live here and not in
+// src/index.ts because a Worker's entry module may only export handlers.
+/** Leaderboard and streak posts. */
+export const DAILY_CRON = "30 4 * * *";
+/** Looks for new members to welcome. */
+export const WELCOME_CRON = "* * * * *";
+
 const list = (value: string | undefined): string[] =>
   (value ?? "")
     .split(",")

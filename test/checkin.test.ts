@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { applyCheckin, currentStreak, daysBetween, localDate, rankStreaks, type CheckinRecord } from "../src/checkin";
 import { runCommand } from "../src/commands";
-import { getConfig } from "../src/config";
-import worker, { DAILY_CRON } from "../src/index";
+import { DAILY_CRON, getConfig } from "../src/config";
+import worker from "../src/index";
 import { checkinPost, streaksMessage } from "../src/messages";
 import { makeEnv, mockFetch, ROADMAPS } from "./helpers";
 

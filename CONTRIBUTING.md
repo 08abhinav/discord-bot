@@ -7,6 +7,12 @@ Thanks for wanting to help with the bot.
 - Check the open issues. If you want to work on one, comment on it and wait until it's assigned to you. One issue at a time, please.
 - For something that isn't an issue yet, open one first so we can agree on it.
 
+## Hacktoberfest and the October program
+
+This repo takes part in Hacktoberfest. A PR counts once it's merged and labeled `hacktoberfest-accepted`.
+
+Those PRs also count for [CODERCOPS October 2026](https://codercops-discord-bot.copscoder.workers.dev/leaderboard/2026-10), together with the ones in chatcops, ogcops and toolbelt. That program and its goodies are CODERCOPS's own and separate from Hacktoberfest. The page has the rules.
+
 ## Ground rules
 
 ### AI tools
@@ -44,8 +50,10 @@ npm run typecheck && npm test
 ```
 
 - Keep logic out of the request handlers. Message text lives in `src/messages.ts` and has no I/O, which is why it's easy to test. New behavior needs a test in `test/`.
-- The bot never pings people and never posts anything that isn't public on GitHub already. Please keep it that way.
+- The bot doesn't ping people and never posts anything that isn't public on GitHub already. The one exception is the welcome post, which notifies the new member it's for. Please keep it that way.
 - Never commit tokens or secrets. Local secrets go in `.dev.vars`, which is gitignored.
 - Use conventional commit titles (`feat:`, `fix:`, `docs:`, `chore:`), and open the pull request against `main` with `Closes #<issue number>`.
 
 CI runs the typecheck and the tests on every pull request.
+
+You can't run the bot against our Discord server, and you don't need to. The tests replace Discord, GitHub and KV with fakes. For the leaderboard page, `npm run dev` serves it at `http://localhost:8787/leaderboard` with no secrets.

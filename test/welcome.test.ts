@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { getConfig } from "../src/config";
-import worker, { WELCOME_CRON } from "../src/index";
+import { getConfig, WELCOME_CRON } from "../src/config";
+import worker from "../src/index";
 import { welcomeMessage } from "../src/messages";
 import { welcomeNewMembers } from "../src/welcome";
 import { makeEnv, mockFetch, type RecordedCall } from "./helpers";

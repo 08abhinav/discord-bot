@@ -7,10 +7,10 @@
   "triggers": {
     // Every day at 04:30 UTC (10:00 IST). On Mondays it posts the leaderboards
     // and the learning streaks; on any day it posts the final results of a
-    // program that has just ended. Keep in sync with DAILY_CRON in src/index.ts.
+    // program that has just ended. Keep in sync with DAILY_CRON in src/config.ts.
     //
     // Every minute: looks for new members to welcome. Keep in sync with
-    // WELCOME_CRON in src/index.ts.
+    // WELCOME_CRON in src/config.ts.
     "crons": ["30 4 * * *", "* * * * *"]
   },
   "kv_namespaces": [{ "binding": "STATE", "id": "a930275781aa44f682ebe9a201d217c7" }],
