@@ -91,6 +91,22 @@ h1{font:700 clamp(28px,6vw,40px)/1.15 ui-monospace,SFMono-Regular,Menlo,monospac
 .others{margin:0 0 36px}
 .others h2{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
 .others ul{margin:0;padding-left:18px}
+.cardlink{font-size:12px;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--fg);white-space:nowrap}
+.cardlink:hover{border-color:var(--cyan);color:var(--cyan);text-decoration:none}
+main.wide{max-width:920px}
+.crumb{font-size:14px;margin:0 0 22px}
+.sharecard{display:block;margin:0 0 20px;border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.35);background:#0a0b0f}
+.sharecard img{display:block;width:100%;height:auto}
+.copy{display:block;margin:0 0 32px;color:var(--muted);font-size:13px}
+.copy input{display:block;width:100%;margin-top:6px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);background:var(--raise);color:var(--fg);font:14px ui-monospace,SFMono-Regular,Menlo,monospace}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:0 0 24px}
+.tile{border:1px solid var(--line);border-radius:12px;background:var(--raise);padding:16px}
+.tile b{display:block;font:700 28px/1.1 ui-monospace,SFMono-Regular,Menlo,monospace;margin-bottom:6px}
+.tile span{color:var(--muted);font-size:13px}
+.tile.accent b{color:var(--cyan)}
+.tile.text b{font-size:19px;line-height:1.45}
+h2.small{font:600 13px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+@media (max-width:520px){.tiles{grid-template-columns:1fr}.cta a{flex:1 1 100%;text-align:center}}
 footer{color:var(--muted);font-size:13px}
 @media (max-width:520px){.chip{display:none}}
 `;
@@ -123,7 +139,8 @@ export function leaderboardPage(board: Leaderboard, program: Program, links: Pag
       const login = escapeHtml(row.login);
       const chip = standing(row, program, state.status);
       const chipHtml = chip ? `<span class="chip ${chip.kind}">${escapeHtml(chip.text)}</span>` : "";
-      return `<li><span class="rank">${i + 1}</span><img src="https://github.com/${encodeURIComponent(row.login)}.png?size=72" alt="" width="36" height="36" loading="lazy"><span class="who"><a href="https://github.com/${encodeURIComponent(row.login)}">${login}</a></span><span class="count">${row.count} merged ${row.count === 1 ? "PR" : "PRs"}</span>${chipHtml}</li>`;
+      const card = `<a class="cardlink" href="/leaderboard/${escapeHtml(program.id)}/u/${encodeURIComponent(row.login)}" title="${login}'s share card">Card</a>`;
+      return `<li><span class="rank">${i + 1}</span><img src="https://github.com/${encodeURIComponent(row.login)}.png?size=72" alt="" width="36" height="36" loading="lazy"><span class="who"><a href="https://github.com/${encodeURIComponent(row.login)}">${login}</a></span><span class="count">${row.count} merged ${row.count === 1 ? "PR" : "PRs"}</span>${chipHtml}${card}</li>`;
     })
     .join("\n");
 
@@ -168,7 +185,7 @@ ${links.others.length ? `<section class="others">\n<h2>Other programs</h2>\n<ul>
 }
 
 /** A small page with a heading and a few paragraphs, for the result of /link. Everything is escaped. */
-export function noticePage(title: string, lines: string[], ok: boolean): string {
+export function noticePage(title: string, lines: string[], ok: boolean, label = ok ? "Done" : "Not linked"): string {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -185,7 +202,101 @@ export function noticePage(title: string, lines: string[], ok: boolean): string 
 <section class="rules">
 ${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("\n")}
 </section>
-<p class="status ${ok ? "running" : ""}">${ok ? "Done" : "Not linked"}</p>
+<p class="status ${ok ? "running" : ""}">${escapeHtml(label)}</p>
+</main>
+</body>
+</html>`;
+}
+
+const ordinal = (n: number): string => {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+};
+
+export interface ContributorLinks {
+  /** This page's own permanent URL. */
+  self: string;
+  /** The card image, as an absolute URL for share previews. It carries a version so previews refresh when the numbers change. */
+  image: string;
+  /** The program's leaderboard page. */
+  board: string;
+  /** The person's counted pull requests on GitHub. */
+  prs: string;
+  issues: string;
+  discord: string;
+}
+
+/** One contributor's page in a program: their share card, ways to share it, and where they stand. */
+export function contributorPage(
+  input: { program: Program; row: LeaderboardRow; rank: number; of: number },
+  links: ContributorLinks,
+  now: Date
+): string {
+  const { program, row, rank, of } = input;
+  const state = statusLine(program, now);
+  const chip = standing(row, program, state.status);
+  const login = escapeHtml(row.login);
+  const prs = `${row.count} merged pull ${row.count === 1 ? "request" : "requests"}`;
+  const heading = `${row.login} in ${program.title}`;
+  const description = `${prs} in ${program.title}. ${ordinal(rank)} of ${of} on the leaderboard.`;
+  const shareText = `${prs} in ${program.title}.`;
+  const linkedin = `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({ url: links.self })}`;
+  const x = `https://twitter.com/intent/tweet?${new URLSearchParams({ text: shareText, url: links.self })}`;
+  const alt = `Share card: ${row.login}, ${prs} in ${program.title}, ${ordinal(rank)} of ${of}.`;
+  const file = `codercops-${program.id}-${row.login}.png`;
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(heading)}</title>
+<meta name="description" content="${escapeHtml(description)}">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="${escapeHtml(heading)}">
+<meta property="og:description" content="${escapeHtml(description)}">
+<meta property="og:image" content="${escapeHtml(links.image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${escapeHtml(alt)}">
+<meta property="og:url" content="${escapeHtml(links.self)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${escapeHtml(links.image)}">
+<link rel="canonical" href="${escapeHtml(links.self)}">
+<style>${STYLE}</style>
+</head>
+<body>
+<main class="wide">
+<p class="crumb"><a href="${escapeHtml(links.board)}">${escapeHtml(program.title)} leaderboard</a></p>
+<p class="eyebrow">CODERCOPS open source program</p>
+<h1>${login}</h1>
+<p class="lede">${escapeHtml(description)}</p>
+<p class="status ${state.status}">${escapeHtml(state.text)}</p>
+<a class="sharecard" href="${escapeHtml(links.image)}"><img src="${escapeHtml(links.image)}" width="1200" height="630" alt="${escapeHtml(alt)}"></a>
+<div class="cta">
+<a class="primary" href="${escapeHtml(linkedin)}" target="_blank" rel="noopener">Share on LinkedIn</a>
+<a href="${escapeHtml(x)}" target="_blank" rel="noopener">Share on X</a>
+<a href="${escapeHtml(links.image)}" download="${escapeHtml(file)}">Download the card</a>
+</div>
+<label class="copy">Link to this page<input readonly value="${escapeHtml(links.self)}" aria-label="Link to this page"></label>
+<div class="tiles">
+<div class="tile accent"><b>${row.count}</b><span>merged pull ${row.count === 1 ? "request" : "requests"}</span></div>
+<div class="tile"><b>${ordinal(rank)}</b><span>of ${of} ${of === 1 ? "contributor" : "contributors"}</span></div>
+<div class="tile text"><b>${escapeHtml(chip ? chip.text : "Took part")}</b><span>${escapeHtml(state.status === "ended" ? "final result" : `needs ${program.minPrs} to qualify, top ${program.topN} win`)}</span></div>
+</div>
+<section class="rules">
+<h2>About this card</h2>
+<p>It counts pull requests merged into ${escapeHtml(program.repos.join(", ").replace(/, ([^,]*)$/, " and $1"))} during ${escapeHtml(dateRange(program.start, program.end))}. The numbers come straight from GitHub and update on their own.</p>
+<p><a href="${escapeHtml(links.prs)}">See ${login}'s merged pull requests on GitHub</a> · <a href="https://github.com/${encodeURIComponent(row.login)}">GitHub profile</a> · <a href="${escapeHtml(links.board)}">Full leaderboard and rules</a></p>
+</section>
+<h2 class="small">Want a card of your own?</h2>
+<div class="cta">
+<a class="primary" href="${escapeHtml(links.issues)}">Find an issue</a>
+<a href="${escapeHtml(links.discord)}">Join the Discord</a>
+<a href="https://www.codercops.com">Hire developers or get hired</a>
+</div>
+<footer>Updated <time datetime="${escapeHtml(now.toISOString())}">${escapeHtml(now.toISOString().slice(0, 16).replace("T", " "))} UTC</time>. Refreshes every few minutes.</footer>
 </main>
 </body>
 </html>`;

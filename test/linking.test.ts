@@ -71,6 +71,12 @@ describe("link state", () => {
     expect(await readState(SECRET, "not.a.state", now)).toBeNull();
   });
 
+  it("uses a separate redirect address when one is configured", () => {
+    const env = makeEnv({ LINKING: "on", DISCORD_CLIENT_SECRET: SECRET, OAUTH_REDIRECT_URL: "https://bot.someone.workers.dev/link/callback" });
+    const url = new URL(authorizeUrl(env, getConfig(env), "s"));
+    expect(url.searchParams.get("redirect_uri")).toBe("https://bot.someone.workers.dev/link/callback");
+  });
+
   it("builds an authorize URL that asks for two scopes and comes back to /link/callback", () => {
     const env = linkingEnv();
     const url = new URL(authorizeUrl(env, getConfig(env), "the-state"));
@@ -308,7 +314,7 @@ describe("/link, /unlink and /me", () => {
         "Merged PRs in our repos: **4**.",
         "You now have the **Contributor** role.",
         "**Hacktoberfest 2026**: 4 merged PRs, 1st of 1. 1 more to qualify for a CODERCOPS T-shirt and stickers.",
-        "<https://bot.example/leaderboard/2026-10>",
+        "Your card to share: <https://bot.example/leaderboard/2026-10/u/Ada>",
       ].join("\n")
     );
     const lifetime = fetched.calls.find((c) => c.url.includes("api.github.com") && decodeURIComponent(c.url).includes("author:Ada"));
@@ -333,7 +339,8 @@ describe("/link, /unlink and /me", () => {
     await saveLink(env, { ...ada, githubLogin: "newcomer" });
     mockFetch(search(4), discordApi({ memberRoles: ["role-contributor"] }));
     const none = await run("me");
-    expect(none.content).toContain("**Hacktoberfest 2026**: no counted PRs yet. Run `/issues` to find one.");
+    expect(none.content).toContain("**Hacktoberfest 2026**: no counted PRs yet. Run `/issues` to find one.\n<https://bot.example/leaderboard/2026-10>");
+    expect(none.content).not.toContain("Your card");
     expect(none.content).not.toContain("You now have");
 
     await saveLink(env, ada);

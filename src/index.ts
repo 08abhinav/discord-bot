@@ -7,7 +7,8 @@ import { GithubError } from "./github";
 import { linkedMembers } from "./links";
 import { completeLink } from "./linking";
 import { leaderboardMessage, LINK_BUTTON_ID, streaksMessage } from "./messages";
-import { leaderboardJson, leaderboardPage, noticePage } from "./page";
+import { cardSvg } from "./card";
+import { contributorPage, leaderboardJson, leaderboardPage, noticePage, standing } from "./page";
 import { currentProgram, findProgram, leaderboardUrl, programStatus } from "./programs";
 import { verifyDiscordRequest, verifyGithubSignature } from "./verify";
 import { handleGithubEvent } from "./webhook";
@@ -155,16 +156,130 @@ async function handleLinkCallback(request: Request, env: Env): Promise<Response>
   });
 }
 
+// One contributor's page in a program, and their share card as a PNG:
+// /leaderboard/{id}/u/{login} and /leaderboard/{id}/u/{login}.png
+const CONTRIBUTOR_PATH = /^\/leaderboard\/([a-z0-9][a-z0-9-]*)\/u\/([A-Za-z\d](?:[A-Za-z\d-]{0,38}))(\.png)?$/;
+
+const PAGE_HEADERS = {
+  "Content-Type": "text/html; charset=utf-8",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+};
+// The contributor page shows one image: the card, served from this Worker.
+const CONTRIBUTOR_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+async function handleContributor(
+  request: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  programId: string,
+  login: string,
+  asPng: boolean
+): Promise<Response> {
+  const cfg = getConfig(env);
+  const now = new Date();
+  const program = findProgram(cfg, programId);
+  if (!program) return new Response("not found", { status: 404 });
+
+  // The card is the same for everyone and costs some CPU to draw, so keep it at the edge.
+  const cache = asPng && typeof caches !== "undefined" ? await caches.open("cards").catch(() => undefined) : undefined;
+  const cached = await cache?.match(request);
+  if (cached) return cached;
+
+  let board;
+  try {
+    board = await getLeaderboard(env, cfg, program);
+  } catch (err) {
+    console.error("contributor page failed", err);
+    return new Response("The leaderboard is unavailable right now.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Retry-After": "60" },
+    });
+  }
+  const index = board.rows.findIndex((r) => r.login.toLowerCase() === login.toLowerCase());
+  const row = board.rows[index];
+  const boardPath = `/leaderboard/${program.id}`;
+  if (!row) {
+    if (asPng) return new Response("not found", { status: 404 });
+    const body = noticePage(
+      "No card yet",
+      [
+        `${login} has no counted pull requests in ${program.title}.`,
+        `A card appears with the first merged pull request that counts. The leaderboard is at ${new URL(boardPath, request.url).href}`,
+      ],
+      false,
+      "No card"
+    );
+    return new Response(body, { status: 404, headers: { ...PAGE_HEADERS, "Cache-Control": "no-store", "Content-Security-Policy": CONTRIBUTOR_CSP } });
+  }
+
+  const rank = index + 1;
+  const of = board.rows.length;
+  const status = programStatus(program, now);
+  const path = `${boardPath}/u/${encodeURIComponent(row.login)}`;
+
+  if (asPng) {
+    // Loaded on demand: this module pulls in the rasterizer and the fonts.
+    const { fetchAvatar, renderPng } = await import("./card-image");
+    const svg = cardSvg({
+      program,
+      row,
+      rank,
+      of,
+      chip: standing(row, program, status),
+      avatar: await fetchAvatar(row.login),
+      site: cfg.publicUrl ? new URL(cfg.publicUrl).host : new URL(request.url).host,
+    });
+    const png = await renderPng(svg);
+    const response = new Response(png, {
+      headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=600", "X-Content-Type-Options": "nosniff" },
+    });
+    if (cache) ctx.waitUntil(cache.put(request, response.clone()));
+    return response;
+  }
+
+  // The version makes share previews pick up a new image when the numbers change.
+  const version = `${row.count}-${rank}-${of}-${status}`;
+  const prsQuery = `org:${cfg.org} is:pr is:merged author:${row.login} label:"${program.label}" merged:${program.start.toISOString().slice(0, 10)}..${program.end.toISOString().slice(0, 10)}`;
+  const html = contributorPage(
+    { program, row, rank, of },
+    {
+      self: new URL(path, request.url).href,
+      image: new URL(`${path}.png?v=${version}`, request.url).href,
+      board: boardPath,
+      prs: `https://github.com/search?${new URLSearchParams({ q: prsQuery, type: "pullrequests" })}`,
+      issues: env.ISSUES_URL,
+      discord: env.DISCORD_INVITE,
+    },
+    now
+  );
+  return new Response(html, { headers: { ...PAGE_HEADERS, "Cache-Control": "public, max-age=300", "Content-Security-Policy": CONTRIBUTOR_CSP } });
+}
+
 // /leaderboard, /leaderboard.json, /leaderboard/{id} and /leaderboard/{id}.json
 const LEADERBOARD_PATH = /^\/leaderboard(?:\/([a-z0-9][a-z0-9-]*))?(\.json)?$/;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
     if (request.method === "POST" && pathname === "/interactions") return handleInteraction(request, env, ctx);
     if (request.method === "POST" && pathname === "/github") return handleGithubWebhook(request, env);
+
+    // The public pages have their own address. Links to them on the Worker's
+    // workers.dev address keep working by redirecting there.
+    const publicUrl = getConfig(env).publicUrl;
+    const onPublicHost = publicUrl !== "" && new URL(publicUrl).host === url.host;
+    if (request.method === "GET" && pathname.startsWith("/leaderboard") && !onPublicHost && url.hostname.endsWith(".workers.dev") && publicUrl) {
+      return Response.redirect(`${publicUrl}${pathname}${url.search}`, 301);
+    }
+    if (request.method === "GET" && pathname === "/" && onPublicHost) {
+      return Response.redirect(`${publicUrl}/leaderboard`, 302);
+    }
     const page = request.method === "GET" ? LEADERBOARD_PATH.exec(pathname) : null;
     if (page) return handleLeaderboardPage(request, env, page[1], page[2] !== undefined);
+    const person = request.method === "GET" ? CONTRIBUTOR_PATH.exec(pathname) : null;
+    if (person) return handleContributor(request, env, ctx, person[1]!, person[2]!, person[3] !== undefined);
     if (request.method === "GET" && pathname === "/link/callback") return handleLinkCallback(request, env);
     if (request.method === "GET" && pathname === "/") {
       return json({ name: "codercops-discord-bot", source: "https://github.com/codercops/discord-bot" });

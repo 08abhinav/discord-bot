@@ -44,11 +44,39 @@ beforeEach(() => {
 describe("routing", () => {
   it("serves a small info page and 404s everything else", async () => {
     const { ctx } = makeCtx();
-    const home = await worker.fetch(new Request("https://bot.example/"), env, ctx);
+    // On any host but the public one, the root says what this is.
+    const home = await worker.fetch(new Request("https://bot.internal/"), env, ctx);
     expect(home.status).toBe(200);
     expect(await home.json()).toMatchObject({ name: "codercops-discord-bot" });
     expect((await worker.fetch(new Request("https://bot.example/nope"), env, ctx)).status).toBe(404);
     expect((await worker.fetch(new Request("https://bot.example/github"), env, ctx)).status).toBe(404);
+  });
+});
+
+describe("public address", () => {
+  it("sends the public host's root to the leaderboard", async () => {
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(new Request("https://bot.example/"), env, ctx);
+    expect(res.status).toBe(302);
+    expect(res.headers.get("Location")).toBe("https://bot.example/leaderboard");
+  });
+
+  it("redirects page links on the workers.dev address to the public one, and nothing else", async () => {
+    const fetched = mockFetch();
+    const { ctx } = makeCtx();
+    const page = await worker.fetch(new Request("https://bot.someone.workers.dev/leaderboard/2026-10/u/ada?x=1"), env, ctx);
+    expect(page.status).toBe(301);
+    expect(page.headers.get("Location")).toBe("https://bot.example/leaderboard/2026-10/u/ada?x=1");
+    expect(fetched.calls).toHaveLength(0);
+
+    // Discord and GitHub keep calling the workers.dev address directly.
+    const home = await worker.fetch(new Request("https://bot.someone.workers.dev/"), env, ctx);
+    expect(home.status).toBe(200);
+    const hook = await worker.fetch(new Request("https://bot.someone.workers.dev/github", { method: "POST", body: "{}" }), env, ctx);
+    expect(hook.status).toBe(401);
+    // A local preview isn't redirected.
+    const local = await worker.fetch(new Request("http://localhost:8787/leaderboard"), env, ctx);
+    expect(local.status).toBe(200);
   });
 });
 

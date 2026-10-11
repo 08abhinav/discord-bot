@@ -4,6 +4,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // The share cards embed two fonts. Bundle them as binary data.
+  "rules": [{ "type": "Data", "globs": ["**/*.ttf"], "fallthrough": true }],
   "triggers": {
     // Every day at 04:30 UTC (10:00 IST). On Mondays it posts the leaderboards
     // and the learning streaks; on any day it posts the final results of a
@@ -13,6 +15,10 @@
     // WELCOME_CRON in src/config.ts.
     "crons": ["30 4 * * *", "* * * * *"]
   },
+  // The public pages (leaderboards and share cards) live on our own domain.
+  // The workers.dev address stays on for Discord and GitHub, which call it
+  // directly, and redirects old page links here.
+  "routes": [{ "pattern": "oss.codercops.com", "custom_domain": true }],
   "kv_namespaces": [{ "binding": "STATE", "id": "a930275781aa44f682ebe9a201d217c7" }],
   "vars": {
     "DISCORD_APPLICATION_ID": "1192400864573403166",
@@ -64,8 +70,11 @@
     ],
     // Added to a program's final results post.
     "FINAL_RESULTS_NOTE": "Got a PR merged? That's a project for your CODERCOPS profile. Add your GitHub handle or the repo link at <https://app.codercops.com/signup>. Profiles are free.",
-    // Where this Worker is reachable. Used for links in Discord messages.
-    "PUBLIC_URL": "https://codercops-discord-bot.copscoder.workers.dev",
+    // Where the public pages live. Used for links in Discord messages.
+    "PUBLIC_URL": "https://oss.codercops.com",
+    // Where Discord sends members back after /link. This exact URL is listed
+    // under OAuth2 > Redirects in the developer portal, so change both together.
+    "OAUTH_REDIRECT_URL": "https://codercops-discord-bot.copscoder.workers.dev/link/callback",
     // Links on the public leaderboard pages.
     "DISCORD_INVITE": "https://discord.gg/mpGdJyjaRQ",
     "ISSUES_URL": "https://github.com/search?q=org%3Acodercops+label%3Ahacktoberfest+state%3Aopen+no%3Aassignee&type=issues",

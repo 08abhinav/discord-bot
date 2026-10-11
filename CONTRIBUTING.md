@@ -11,7 +11,7 @@ Thanks for wanting to help with the bot.
 
 This repo takes part in Hacktoberfest. A PR counts once it's merged and labeled `hacktoberfest-accepted`.
 
-Those PRs also count for [CODERCOPS October 2026](https://codercops-discord-bot.copscoder.workers.dev/leaderboard/2026-10), together with the ones in chatcops, ogcops and toolbelt. That program and its goodies are CODERCOPS's own and separate from Hacktoberfest. The page has the rules.
+Those PRs also count for [CODERCOPS October 2026](https://oss.codercops.com/leaderboard/2026-10), together with the ones in chatcops, ogcops and toolbelt. That program and its goodies are CODERCOPS's own and separate from Hacktoberfest. The page has the rules.
 
 ## Ground rules
 

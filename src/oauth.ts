@@ -13,7 +13,7 @@ const encoder = new TextEncoder();
 export const linkingEnabled = (env: Env): boolean => env.LINKING === "on" && Boolean(env.DISCORD_CLIENT_SECRET);
 
 /** Must be listed under OAuth2 > Redirects in the Discord developer portal. */
-export const redirectUri = (cfg: Config): string => `${cfg.publicUrl}/link/callback`;
+export const redirectUri = (cfg: Config): string => cfg.oauthRedirectUrl;
 
 const stateKey = (secret: string, usages: ("sign" | "verify")[]) =>
   crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, usages);

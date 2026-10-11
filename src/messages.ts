@@ -334,8 +334,9 @@ export function meReply(input: {
       else if (s.row.qualifies) line += ` You qualify, but you're outside the top ${topN} right now.`;
       else line += ` ${minPrs - s.row.count} more to qualify for ${reward}.`;
       lines.push(line);
+      lines.push(`Your card to share: <${s.url}/u/${encodeURIComponent(input.login)}>`);
     }
-    lines.push(`<${s.url}>`);
+    if (!s.row || !s.rank) lines.push(`<${s.url}>`);
   }
   return { content: lines.join("\n") };
 }

@@ -18,5 +18,8 @@
     "typescript": "^5.9.3",
     "vitest": "^4.1.11",
     "wrangler": "^4.149.0"
+  },
+  "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2"
   }
 }

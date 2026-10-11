@@ -95,8 +95,14 @@ export interface Env {
   PROGRAMS: ProgramInput[] | string;
   /** Optional line added to a program's final results post. */
   FINAL_RESULTS_NOTE?: string;
-  /** Where this Worker is reachable, without a trailing slash. Used for links in Discord messages. */
+  /** Where the public pages live, without a trailing slash. Used for links in Discord messages. */
   PUBLIC_URL: string;
+  /**
+   * Optional. Where Discord sends members back after /link. It has to be listed
+   * under OAuth2 > Redirects in the developer portal. Defaults to
+   * {PUBLIC_URL}/link/callback.
+   */
+  OAUTH_REDIRECT_URL?: string;
   /** Invite link shown on the public leaderboard page. */
   DISCORD_INVITE: string;
   /** Where the public page sends people to find an issue. */
@@ -122,6 +128,7 @@ export interface Config {
   programs: Program[];
   finalResultsNote: string;
   publicUrl: string;
+  oauthRedirectUrl: string;
   roadmaps: Roadmap[];
   checkinUtcOffsetMinutes: number;
 }
@@ -144,6 +151,7 @@ const array = <T>(value: T[] | string | undefined): T[] =>
 
 export function getConfig(env: Env): Config {
   const repos = list(env.REPOS);
+  const publicUrl = (env.PUBLIC_URL ?? "").replace(/\/+$/, "");
   const programs = array(env.PROGRAMS)
     .filter((p) => (p.kind ?? "merged-prs") === "merged-prs")
     .map(
@@ -172,7 +180,8 @@ export function getConfig(env: Env): Config {
     roleTiers: array(env.ROLE_TIERS).sort((a, b) => a.minPrs - b.minPrs),
     programs,
     finalResultsNote: (env.FINAL_RESULTS_NOTE ?? "").trim(),
-    publicUrl: (env.PUBLIC_URL ?? "").replace(/\/+$/, ""),
+    publicUrl,
+    oauthRedirectUrl: env.OAUTH_REDIRECT_URL?.trim() || `${publicUrl}/link/callback`,
     roadmaps: array(env.ROADMAPS),
     checkinUtcOffsetMinutes: Number(env.CHECKIN_UTC_OFFSET_MINUTES ?? 0),
   };
