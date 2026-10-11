@@ -1,6 +1,6 @@
 # CODERCOPS Discord bot
 
-The bot behind the open source channels on the CODERCOPS Discord server. It watches our public repos ([chatcops](https://github.com/codercops/chatcops), [ogcops](https://github.com/codercops/ogcops), [toolbelt](https://github.com/codercops/toolbelt)) and keeps contributors in the loop:
+The bot behind the open source channels on the [CODERCOPS Discord server](https://discord.gg/mpGdJyjaRQ). It watches our public repos ([chatcops](https://github.com/codercops/chatcops), [ogcops](https://github.com/codercops/ogcops), [toolbelt](https://github.com/codercops/toolbelt)) and keeps contributors in the loop:
 
 - **Releases** go to `#releases` with their notes.
 - **Starter issues** (`good first issue` and `help wanted`) go to `#starter-issues`. Each issue gets one message, and the bot edits it when the issue is claimed, freed up or closed, so the channel always shows what's really available.
@@ -77,3 +77,5 @@ Issues and pull requests are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md).
 ## License
 
 MIT, see [LICENSE](./LICENSE).
+
+Built by [CODERCOPS](https://www.codercops.com), the chat-first hiring platform for developers.
