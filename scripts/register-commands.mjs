@@ -15,7 +15,7 @@ if (!token || !guildId) {
 
 // wrangler.jsonc allows comments, so strip them before parsing.
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
-const { DISCORD_APPLICATION_ID: appId, REPOS, ROADMAPS, PROGRAMS } = config.vars;
+const { DISCORD_APPLICATION_ID: appId, REPOS, ROADMAPS, PROGRAMS, LINKING } = config.vars;
 const repos = REPOS.split(',').map((r) => r.trim());
 const longestRoadmap = Math.max(...ROADMAPS.map((r) => r.days));
 
@@ -72,6 +72,15 @@ const commands = [
   },
   { name: 'streaks', description: 'Show the learning streaks for every roadmap' },
 ];
+
+// These only make sense once linking is switched on in wrangler.jsonc.
+if (LINKING === 'on') {
+  commands.push(
+    { name: 'link', description: 'Link your GitHub account to your Discord account', contexts: [0] },
+    { name: 'unlink', description: 'Remove the link between your GitHub and Discord accounts', contexts: [0] },
+    { name: 'me', description: 'Show your merged PRs and where you stand', contexts: [0] }
+  );
+}
 
 const res = await fetch(`https://discord.com/api/v10/applications/${appId}/guilds/${guildId}/commands`, {
   method: 'PUT',

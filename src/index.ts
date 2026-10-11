@@ -4,11 +4,14 @@ import { getConfig, type Config, type Env } from "./config";
 import { editInteractionReply, sendMessage } from "./discord";
 import { getLeaderboard } from "./leaderboard";
 import { GithubError } from "./github";
-import { leaderboardMessage, streaksMessage } from "./messages";
-import { leaderboardJson, leaderboardPage } from "./page";
+import { linkedMembers } from "./links";
+import { completeLink } from "./linking";
+import { leaderboardMessage, LINK_BUTTON_ID, streaksMessage } from "./messages";
+import { leaderboardJson, leaderboardPage, noticePage } from "./page";
 import { currentProgram, findProgram, leaderboardUrl, programStatus } from "./programs";
 import { verifyDiscordRequest, verifyGithubSignature } from "./verify";
 import { handleGithubEvent } from "./webhook";
+import { welcomeNewMembers } from "./welcome";
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
@@ -16,12 +19,15 @@ const json = (data: unknown, status = 200) =>
 // Discord interaction and response types we use.
 const PING = 1;
 const APPLICATION_COMMAND = 2;
+const MESSAGE_COMPONENT = 3;
 const PONG = 1;
 const DEFERRED_CHANNEL_MESSAGE = 5;
 const EPHEMERAL = 64;
 
 /** The cron for the leaderboard and streak posts. Must match wrangler.jsonc. */
 export const DAILY_CRON = "30 4 * * *";
+/** The cron that looks for new members to welcome. Must match wrangler.jsonc. */
+export const WELCOME_CRON = "* * * * *";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -34,7 +40,8 @@ interface DiscordUser {
 interface Interaction {
   type: number;
   token: string;
-  data?: CommandData;
+  /** A command's name and options, or the custom_id of the button that was pressed. */
+  data?: CommandData & { custom_id?: string };
   /** Present when the command is run in a server. */
   member?: { nick?: string | null; user: DiscordUser };
 }
@@ -59,8 +66,10 @@ async function handleInteraction(request: Request, env: Env, ctx: ExecutionConte
   const interaction = JSON.parse(body) as Interaction;
   if (interaction.type === PING) return json({ type: PONG });
 
-  if (interaction.type === APPLICATION_COMMAND && interaction.data) {
-    const data = interaction.data;
+  // The "Link GitHub" button on the welcome post does what /link does.
+  const pressedLink = interaction.type === MESSAGE_COMPONENT && interaction.data?.custom_id === LINK_BUTTON_ID;
+  if ((interaction.type === APPLICATION_COMMAND || pressedLink) && interaction.data) {
+    const data: CommandData = pressedLink ? { name: "link" } : interaction.data;
     // Discord wants an answer within 3 seconds. Acknowledge now, then fill in
     // the reply once GitHub has answered.
     ctx.waitUntil(
@@ -134,6 +143,22 @@ async function handleLeaderboardPage(request: Request, env: Env, id: string | un
   }
 }
 
+// Where Discord sends a member after they approve (or cancel) the /link request.
+async function handleLinkCallback(request: Request, env: Env): Promise<Response> {
+  const outcome = await completeLink(env, getConfig(env), new URL(request.url).searchParams, new Date());
+  return new Response(noticePage(outcome.title, outcome.lines, outcome.ok), {
+    status: outcome.ok ? 200 : 400,
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      // The URL carries a one-time code. Keep it out of caches and referrers.
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
+}
+
 // /leaderboard, /leaderboard.json, /leaderboard/{id} and /leaderboard/{id}.json
 const LEADERBOARD_PATH = /^\/leaderboard(?:\/([a-z0-9][a-z0-9-]*))?(\.json)?$/;
 
@@ -144,6 +169,7 @@ export default {
     if (request.method === "POST" && pathname === "/github") return handleGithubWebhook(request, env);
     const page = request.method === "GET" ? LEADERBOARD_PATH.exec(pathname) : null;
     if (page) return handleLeaderboardPage(request, env, page[1], page[2] !== undefined);
+    if (request.method === "GET" && pathname === "/link/callback") return handleLinkCallback(request, env);
     if (request.method === "GET" && pathname === "/") {
       return json({ name: "codercops-discord-bot", source: "https://github.com/codercops/discord-bot" });
     }
@@ -154,6 +180,7 @@ export default {
     const cfg = getConfig(env);
     const now = new Date(controller.scheduledTime);
     if (controller.cron === DAILY_CRON) await dailyPosts(env, cfg, now);
+    if (controller.cron === WELCOME_CRON) await welcomeNewMembers(env, cfg, now);
   },
 } satisfies ExportedHandler<Env>;
 
@@ -166,7 +193,8 @@ async function dailyPosts(env: Env, cfg: Config, now: Date): Promise<void> {
     const url = leaderboardUrl(cfg, program);
     if (status === "running" && monday) {
       const board = await getLeaderboard(env, cfg, program, { fresh: true });
-      await sendMessage(env, env.CHANNEL_LEADERBOARD, leaderboardMessage(board, program, { url }));
+      const members = await linkedMembers(env, board.rows.slice(0, 10).map((r) => r.login));
+      await sendMessage(env, env.CHANNEL_LEADERBOARD, leaderboardMessage(board, program, { url, members }));
     }
     // Only in the week after the end, so adding an old program to the config
     // doesn't announce it.
@@ -174,10 +202,11 @@ async function dailyPosts(env: Env, cfg: Config, now: Date): Promise<void> {
       const posted = `final:${program.id}`;
       if (await env.STATE.get(posted)) continue;
       const board = await getLeaderboard(env, cfg, program, { fresh: true });
+      const members = await linkedMembers(env, board.rows.slice(0, 10).map((r) => r.login));
       await sendMessage(
         env,
         env.CHANNEL_LEADERBOARD,
-        leaderboardMessage(board, program, { final: true, url, finalNote: cfg.finalResultsNote })
+        leaderboardMessage(board, program, { final: true, url, finalNote: cfg.finalResultsNote, members })
       );
       await env.STATE.put(posted, now.toISOString());
     }

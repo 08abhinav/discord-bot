@@ -8,6 +8,8 @@ The bot behind the open source channels on the [CODERCOPS Discord server](https:
 - **`/issues`** lists the open starter issues nobody has claimed yet. **`/leaderboard`** shows who has the most merged PRs in a contributor program.
 - A **weekly leaderboard** is posted while a program is running, and the final results once it ends.
 - Every program has a public page, for example [CODERCOPS October 2026](https://codercops-discord-bot.copscoder.workers.dev/leaderboard/2026-10), with a JSON version next to it.
+- **New members get a welcome post** in `#introductions` that points them to the things they can do.
+- **`/link`** connects a member's GitHub account to their Discord account. Linked members appear by name next to their merged PRs, get the Contributor role with their first merged PR, and can run **`/me`** to see where they stand.
 - **`/checkin`** logs a day on one of our learning roadmaps. The bot opens a log thread for each learner, adds every day to it and keeps their streak. **`/streaks`** shows who's on a roll, and the weekly post includes the streak board.
 
 It runs on Cloudflare Workers. There is no server to keep alive and no Discord gateway connection: Discord and GitHub both call the Worker over HTTPS.
@@ -19,9 +21,11 @@ It runs on Cloudflare Workers. There is no server to keep alive and no Discord g
 | `POST /interactions` | Discord, when someone runs a slash command | The Ed25519 signature is checked, the command is acknowledged right away, and the reply is filled in once GitHub has answered. |
 | `POST /github` | GitHub webhooks (`release`, `issues`, `pull_request`) | The HMAC signature is checked, then the event becomes a new or edited Discord message. |
 | `GET /leaderboard/{id}`, `GET /leaderboard/{id}.json` | Anyone | One program's ranking as a page or as JSON. `/leaderboard` shows the current program. No scripts, no cookies, cached for five minutes. |
+| `GET /link/callback` | Discord, after a member approves `/link` | Reads the member's verified GitHub connection, stores the link and hands out any role they've earned. |
+| cron | Cloudflare, every minute | Looks for members who just joined and welcomes them. |
 | cron | Cloudflare, every day at 04:30 UTC | On Mondays, posts the leaderboard of each running program and the learning streaks. On any day, posts the final results of a program that has just ended. |
 
-A small KV namespace remembers which Discord message belongs to which issue, caches the leaderboard for a few minutes, and stores each learner's check-in progress.
+A small KV namespace remembers which Discord message belongs to which issue, caches the leaderboards for a few minutes, and stores each learner's check-in progress and each member's GitHub link.
 
 The code is split so the logic is easy to test:
 
@@ -32,6 +36,8 @@ The code is split so the logic is easy to test:
 - `src/programs.ts` picks the program to show and says whether it's upcoming, running or over.
 - `src/page.ts` builds the public leaderboard page and its JSON. It has no I/O either.
 - `src/checkin.ts` holds the check-in rules and the streak ranking.
+- `src/welcome.ts` finds new members and greets them.
+- `src/oauth.ts`, `src/linking.ts`, `src/links.ts` and `src/roles.ts` are the GitHub link: the Discord OAuth2 calls, the callback, the stored link, and the roles that come with it.
 - `src/github.ts` and `src/discord.ts` are thin API clients.
 
 ## Contributor programs
@@ -73,6 +79,33 @@ The roadmaps are listed in `ROADMAPS` in `wrangler.jsonc`, each with its length,
 - A streak continues only if the last check-in was the day before. Miss a day and it starts again at 1; the day number and the best streak are kept.
 - Each learner gets one thread per roadmap. If it was deleted, the next check-in opens a new one.
 
+## Welcome posts
+
+Discord announces joins only over the gateway, and this bot has no gateway connection. So a cron reads the member list every minute and greets anyone who joined in the last two hours and hasn't been greeted. Bots are skipped, and so are people who haven't accepted the rules screening yet.
+
+The welcome is the one message where the bot notifies someone: the new member, once. Everything else it posts shows names without pinging.
+
+It needs the Server Members intent (Developer Portal > Bot), `DISCORD_GUILD_ID` and `CHANNEL_WELCOME`. Leave `CHANNEL_WELCOME` empty to switch it off.
+
+## Linking a GitHub account
+
+`/link` answers privately with a button. It opens Discord's consent screen, which asks the member to share their username and their connected accounts (the `identify` and `connections` scopes). After they approve, the bot reads the GitHub account connected to their Discord profile. Discord has already verified that connection, so there is no separate GitHub login and nobody can claim an account that isn't theirs. Members without a GitHub connection are told to add one under User Settings > Connections.
+
+What the bot keeps: the member's Discord id, their GitHub username and GitHub's numeric id for it, and the time of linking. The OAuth token is revoked as soon as those two reads are done. `/unlink` deletes the entry and takes back the roles below.
+
+What linking does:
+
+- Merged PR shoutouts and leaderboard posts show the Discord member next to the GitHub login. The public leaderboard page shows GitHub logins only.
+- `ROLE_TIERS` in `wrangler.jsonc` lists roles by merged PR count in `REPOS` (at any time, not per program). Ours are Contributor at 1 and Top Contributor at 5. A role is given when the PR that earns it is merged, and at linking time for PRs that were merged before.
+- `/me` shows the member's merged PRs, their place in the current program and how many more they need to qualify.
+
+To switch it on:
+
+1. In the Developer Portal, under OAuth2, add `{PUBLIC_URL}/link/callback` to the redirects.
+2. `npx wrangler secret put DISCORD_CLIENT_SECRET` with the client secret from the same page.
+3. Set `LINKING` to `"on"` in `wrangler.jsonc`, deploy, and run `npm run register` so `/link`, `/unlink` and `/me` appear.
+4. Give the bot Manage Roles and keep its own role above the tier roles.
+
 ## Development
 
 You need Node 24 (see `.nvmrc`).
@@ -94,7 +127,7 @@ GITHUB_WEBHOOK_SECRET=...
 
 ## Running your own copy
 
-1. Create a Discord application with a bot user and add it to your server with the `bot` and `applications.commands` scopes. It needs View Channels, Send Messages, Embed Links and Read Message History in the channels it posts to.
+1. Create a Discord application with a bot user and add it to your server with the `bot` and `applications.commands` scopes. It needs View Channels, Send Messages, Embed Links and Read Message History in the channels it posts to. The welcome posts and the roles are optional and need more: see the two sections above.
 2. Create a KV namespace with `npx wrangler kv namespace create STATE` and put its id in `wrangler.jsonc`.
 3. Fill in the `vars` in `wrangler.jsonc`: your application id and public key, the channel ids, your org and repos.
 4. Set the secrets:

@@ -3,9 +3,12 @@
 import { listCheckins, localDate, rankStreaks, recordCheckin } from "./checkin";
 import type { Config, Env } from "./config";
 import type { MessagePayload } from "./discord";
-import { GithubError, listStarterIssues } from "./github";
+import { countMergedPrs, GithubError, listStarterIssues } from "./github";
 import { getLeaderboard } from "./leaderboard";
-import { checkinReply, leaderboardMessage, starterIssuesReply, streaksMessage } from "./messages";
+import { getLink, linkedMembers, removeLink } from "./links";
+import { checkinReply, leaderboardMessage, linkPrompt, meReply, starterIssuesReply, streaksMessage } from "./messages";
+import { authorizeUrl, linkingEnabled, signState } from "./oauth";
+import { grantEarnedRoles, removeTierRoles } from "./roles";
 import { currentProgram, findProgram, leaderboardUrl, programStatus } from "./programs";
 
 export interface CommandData {
@@ -18,6 +21,8 @@ export interface CommandUser {
   id: string;
   name: string;
 }
+
+const IN_SERVER_ONLY: MessagePayload = { content: "Run this inside the server, not in a DM." };
 
 export async function runCommand(
   data: CommandData,
@@ -59,9 +64,56 @@ export async function runCommand(
       case "leaderboard": {
         const program = findProgram(cfg, option("program")) ?? currentProgram(cfg, now);
         if (!program) return { content: "There's no contributor program right now." };
-        return leaderboardMessage(await getLeaderboard(env, cfg, program), program, {
+        const board = await getLeaderboard(env, cfg, program);
+        return leaderboardMessage(board, program, {
           final: programStatus(program, now) === "ended",
           url: leaderboardUrl(cfg, program),
+          members: await linkedMembers(env, board.rows.slice(0, 10).map((r) => r.login)),
+        });
+      }
+      case "link": {
+        if (!user) return IN_SERVER_ONLY;
+        if (!linkingEnabled(env)) return { content: "Linking isn't switched on yet. Check back soon." };
+        const existing = await getLink(env, user.id);
+        const state = await signState(env.DISCORD_CLIENT_SECRET ?? "", user.id, now);
+        return linkPrompt(authorizeUrl(env, cfg, state), existing?.githubLogin);
+      }
+      case "unlink": {
+        if (!user) return IN_SERVER_ONLY;
+        const removed = await removeLink(env, user.id);
+        if (!removed) return { content: "You have no linked GitHub account, so there's nothing to remove." };
+        // The link is gone either way; a role that couldn't be removed isn't worth an error.
+        await removeTierRoles(env, cfg, user.id).catch((err) => console.error("removing roles failed", err));
+        return {
+          content: `Unlinked from **${removed.githubLogin}**. I deleted what I had stored and took back the contributor roles. Run \`/link\` if you change your mind.`,
+        };
+      }
+      case "me": {
+        if (!user) return IN_SERVER_ONLY;
+        const link = await getLink(env, user.id);
+        if (!link) return { content: "You haven't linked a GitHub account yet. Run `/link` first." };
+        const merged = await countMergedPrs(env, cfg, link.githubLogin);
+        // Catches up on a role if a merge was missed.
+        const newRoles = await grantEarnedRoles(env, cfg, user.id, merged).catch((err) => {
+          console.error("granting roles failed", err);
+          return [] as string[];
+        });
+        const program = currentProgram(cfg, now);
+        if (!program) return meReply({ login: link.githubLogin, merged, newRoles });
+        const board = await getLeaderboard(env, cfg, program);
+        const index = board.rows.findIndex((r) => r.login.toLowerCase() === link.githubLogin.toLowerCase());
+        return meReply({
+          login: link.githubLogin,
+          merged,
+          newRoles,
+          standing: {
+            program,
+            status: programStatus(program, now),
+            url: leaderboardUrl(cfg, program),
+            rank: index >= 0 ? index + 1 : undefined,
+            row: board.rows[index],
+            of: board.rows.length,
+          },
         });
       }
       default:

@@ -92,3 +92,16 @@ export async function searchMergedPrs(env: Env, cfg: Config, program: Program): 
   }
   return prs;
 }
+
+/**
+ * How many merged PRs a person has in our repos, at any time. `exceptUrl`
+ * leaves one PR out, for the moment right after a merge when GitHub's search
+ * index may or may not have it yet.
+ */
+export async function countMergedPrs(env: Env, cfg: Config, login: string, exceptUrl?: string): Promise<number> {
+  const q = ["is:pr", "is:merged", `author:${login}`, ...cfg.repos.map((r) => `repo:${cfg.org}/${r}`)].join(" ");
+  const query = new URLSearchParams({ q, per_page: "100" });
+  const result = await gh<SearchResult>(env, `/search/issues?${query}`);
+  const listed = exceptUrl !== undefined && result.items.some((item) => item.html_url === exceptUrl);
+  return result.total_count - (listed ? 1 : 0);
+}

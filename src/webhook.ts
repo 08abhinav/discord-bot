@@ -1,8 +1,10 @@
 // Handles GitHub webhook events: releases, starter issues and merged PRs.
 import type { Config, Env } from "./config";
 import { editMessage, sendMessage } from "./discord";
-import { searchMergedPrs, type StarterIssue } from "./github";
+import { countMergedPrs, searchMergedPrs, type StarterIssue } from "./github";
 import { invalidateLeaderboard } from "./leaderboard";
+import { getLinkByGithub } from "./links";
+import { grantEarnedRoles } from "./roles";
 import { mergedPrMessage, releaseMessage, starterIssueMessage, type StarterState } from "./messages";
 
 interface Repository {
@@ -155,11 +157,32 @@ async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promis
     }
   }
 
+  // If the author linked their GitHub account, show who they are here and
+  // hand out any role this merge earned. The shoutout goes out either way.
+  const link = await getLinkByGithub(env, pr.user.login);
+  let newRoles: string[] = [];
+  if (link) {
+    try {
+      const earlier = await countMergedPrs(env, cfg, pr.user.login, pr.html_url);
+      newRoles = await grantEarnedRoles(env, cfg, link.discordId, earlier + 1);
+    } catch (err) {
+      console.error("granting roles failed", err);
+    }
+  }
+
   await sendMessage(
     env,
     env.CHANNEL_MERGED_PRS,
     mergedPrMessage(
-      { repo: e.repository.name, number: pr.number, title: pr.title, url: pr.html_url, login: pr.user.login },
+      {
+        repo: e.repository.name,
+        number: pr.number,
+        title: pr.title,
+        url: pr.html_url,
+        login: pr.user.login,
+        discordId: link?.discordId,
+        newRoles,
+      },
       countInWindow
     )
   );

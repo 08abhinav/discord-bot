@@ -2,9 +2,10 @@
 // everything in this file is easy to unit test.
 import type { CheckinRecord, CheckinResult } from "./checkin";
 import type { Config, Program, Roadmap } from "./config";
-import type { Embed, MessagePayload } from "./discord";
+import type { ActionRow, Button, Embed, MessagePayload } from "./discord";
 import type { StarterIssue } from "./github";
-import type { Leaderboard } from "./leaderboard";
+import type { Leaderboard, LeaderboardRow } from "./leaderboard";
+import type { ProgramStatus } from "./programs";
 
 const COLOR = { open: 0x2ea043, claimed: 0x8b949e, done: 0x8957e5, release: 0x1f6feb, merged: 0x8957e5, gold: 0xd4a72c };
 
@@ -61,14 +62,33 @@ export function starterIssueMessage(issue: StarterIssue, state: StarterState): M
   };
 }
 
+/** A GitHub login in bold, followed by the Discord member behind it when they've linked their account. */
+const person = (login: string, discordId?: string) =>
+  `**${escapeMarkdown(login)}**${discordId ? ` (<@${discordId}>)` : ""}`;
+
+const joinNames = (names: string[]) => names.join(", ").replace(/, ([^,]*)$/, " and $1");
+
 export function mergedPrMessage(
-  pr: { repo: string; number: number; title: string; url: string; login: string },
+  pr: {
+    repo: string;
+    number: number;
+    title: string;
+    url: string;
+    login: string;
+    /** The author's Discord id, when they've linked their GitHub account. */
+    discordId?: string;
+    /** Roles this merge earned them. */
+    newRoles?: string[];
+  },
   /** How many counted PRs the author has in the leaderboard window, when known. */
   countInWindow?: { count: number; label: string }
 ): MessagePayload {
-  let description = `**${escapeMarkdown(pr.login)}** got a PR merged in **${pr.repo}**: [${escapeMarkdown(truncate(pr.title, 200))}](${pr.url})`;
+  let description = `${person(pr.login, pr.discordId)} got a PR merged in **${pr.repo}**: [${escapeMarkdown(truncate(pr.title, 200))}](${pr.url})`;
   if (countInWindow && countInWindow.count > 0) {
     description += `\nThat's their ${ordinal(countInWindow.count)} merged PR on the ${countInWindow.label} leaderboard.`;
+  }
+  if (pr.newRoles?.length) {
+    description += `\nThat earns them the ${joinNames(pr.newRoles.map((r) => `**${r}**`))} role.`;
   }
   return { embeds: [{ description, color: COLOR.merged }] };
 }
@@ -83,14 +103,17 @@ export function leaderboardMessage(
     url?: string;
     /** Extra line for the final results. */
     finalNote?: string;
+    /** Lowercased GitHub login to Discord id, for people who linked their account. */
+    members?: Map<string, string>;
   } = {}
 ): MessagePayload {
+  const who = (login: string) => person(login, opts.members?.get(login.toLowerCase()));
   const { title, minPrs, topN, reward, label, note } = program;
   const shown = board.rows.slice(0, opts.limit ?? 10);
   const lines = shown.map((row, i) => {
     const prs = `${row.count} merged ${row.count === 1 ? "PR" : "PRs"}`;
     const note = row.winner ? (opts.final ? " · winner" : " · in the top " + topN) : row.qualifies ? " · qualifies" : "";
-    return `${i + 1}. **${escapeMarkdown(row.login)}** · ${prs}${note}`;
+    return `${i + 1}. ${who(row.login)} · ${prs}${note}`;
   });
   const winners = board.rows.filter((r) => r.winner);
 
@@ -102,7 +125,7 @@ export function leaderboardMessage(
     if (opts.final) {
       description +=
         winners.length > 0
-          ? `\n\nCongratulations to ${winners.map((w) => `**${escapeMarkdown(w.login)}**`).join(", ")}. We'll reach out on GitHub to send you ${reward}.`
+          ? `\n\nCongratulations to ${winners.map((w) => who(w.login)).join(", ")}. We'll reach out on GitHub to send you ${reward}.`
           : `\n\nNobody reached ${minPrs} merged PRs this time. Thank you to everyone who contributed.`;
       if (opts.finalNote) description += `\n\n${opts.finalNote}`;
     }
@@ -218,4 +241,98 @@ export function streaksMessage(
     return { content: "Nobody has checked in yet. Run `/checkin` to start your streak." };
   }
   return { content: "Learning streaks. Check in every day with `/checkin` to keep yours alive.", embeds };
+}
+
+// ---- welcome, linking and /me ----
+
+const row = (...components: Button[]): ActionRow => ({ type: 1, components });
+const linkButton = (label: string, url: string): Button => ({ type: 2, style: 5, label, url });
+
+/** The button on the welcome post that starts /link. Its id is matched in src/index.ts. */
+export const LINK_BUTTON_ID = "link";
+
+/** Posted once for every new member. The only message that notifies the person it mentions. */
+export function welcomeMessage(userId: string, cfg: Config, opts: { linking: boolean; issuesUrl?: string }): MessagePayload {
+  const lines = [
+    "Good to have you here. CODERCOPS is a community of developers: open source contributors, people working through our learning roadmaps, and people looking for their next job.",
+    "",
+    "Say hi in this channel. Tell us who you are and what you're building.",
+    "Want to contribute? Run `/issues` to see what's free to pick up.",
+  ];
+  if (cfg.roadmapsChannel) lines.push(`Here to learn? Pick a roadmap in <#${cfg.roadmapsChannel}> and log each day with \`/checkin\`.`);
+  if (opts.linking) {
+    lines.push("Link your GitHub with the button below, so your merged PRs show up under your name and you get the Contributor role.");
+  }
+
+  const buttons: Button[] = [];
+  if (opts.linking) buttons.push({ type: 2, style: 1, label: "Link GitHub", custom_id: LINK_BUTTON_ID });
+  if (opts.issuesUrl) buttons.push(linkButton("Find an issue", opts.issuesUrl));
+  if (cfg.guildId && cfg.roadmapsChannel) {
+    buttons.push(linkButton("Pick a roadmap", `https://discord.com/channels/${cfg.guildId}/${cfg.roadmapsChannel}`));
+  }
+  return {
+    content: `Welcome, <@${userId}>!`,
+    embeds: [{ description: lines.join("\n"), color: COLOR.open }],
+    components: buttons.length ? [row(...buttons)] : undefined,
+  };
+}
+
+/** The private reply to /link: what gets shared, and the button that opens Discord's consent screen. */
+export function linkPrompt(url: string, currentLogin?: string): MessagePayload {
+  const lines = [
+    currentLogin
+      ? `You're linked to **${escapeMarkdown(currentLogin)}** right now. Linking again replaces that.`
+      : "Link your GitHub account to your Discord account.",
+    "",
+    "The button opens Discord and asks to share your username and your connected accounts. I read the GitHub account connected to your Discord profile and store two things: your Discord id and your GitHub username. Your GitHub username will show next to your name in this server, for example when a PR of yours is merged. `/unlink` deletes it again.",
+    "",
+    "No GitHub on your Discord profile yet? Add it first under User Settings > Connections. The button works for 15 minutes.",
+  ];
+  return { content: lines.join("\n"), components: [row(linkButton("Link my GitHub", url))] };
+}
+
+/** The private reply to /me. */
+export function meReply(input: {
+  login: string;
+  /** Merged PRs in our repos, at any time. */
+  merged: number;
+  /** Roles handed out just now. */
+  newRoles: string[];
+  standing?: {
+    program: Program;
+    status: ProgramStatus;
+    url: string;
+    /** 1-based, with the row; both missing when they have no counted PR. */
+    rank?: number;
+    row?: LeaderboardRow;
+    of: number;
+  };
+}): MessagePayload {
+  const lines = [
+    `You're linked to **${escapeMarkdown(input.login)}** on GitHub.`,
+    `Merged PRs in our repos: **${input.merged}**.`,
+  ];
+  if (input.newRoles.length) lines.push(`You now have the ${joinNames(input.newRoles.map((r) => `**${r}**`))} role.`);
+
+  const s = input.standing;
+  if (s) {
+    const { title, minPrs, topN, reward } = s.program;
+    if (!s.row || !s.rank) {
+      lines.push(
+        s.status === "ended"
+          ? `**${title}** is over and you had no counted PRs in it.`
+          : `**${title}**: no counted PRs yet. Run \`/issues\` to find one.`
+      );
+    } else {
+      const prs = `${s.row.count} merged ${s.row.count === 1 ? "PR" : "PRs"}`;
+      let line = `**${title}**: ${prs}, ${ordinal(s.rank)} of ${s.of}.`;
+      if (s.status === "ended") line += s.row.winner ? " You're one of the winners." : "";
+      else if (s.row.winner) line += ` You're in the top ${topN} right now.`;
+      else if (s.row.qualifies) line += ` You qualify, but you're outside the top ${topN} right now.`;
+      else line += ` ${minPrs - s.row.count} more to qualify for ${reward}.`;
+      lines.push(line);
+    }
+    lines.push(`<${s.url}>`);
+  }
+  return { content: lines.join("\n") };
 }

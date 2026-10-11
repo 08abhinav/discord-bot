@@ -50,18 +50,39 @@ export interface ProgramInput {
   note?: string;
 }
 
+/** A role a linked member gets once they have this many merged PRs in our repos. */
+export interface RoleTier {
+  minPrs: number;
+  /** The Discord role id. The bot's own role has to sit above it. */
+  role: string;
+  /** The role's name, for messages. */
+  name: string;
+}
+
 export interface Env {
   STATE: KVNamespace;
 
   // Secrets (wrangler secret put ...)
   DISCORD_BOT_TOKEN: string;
   GITHUB_WEBHOOK_SECRET: string;
+  /** Optional. The application's OAuth2 client secret, needed for /link. */
+  DISCORD_CLIENT_SECRET?: string;
   /** Optional. Without it GitHub's unauthenticated rate limit applies. */
   GITHUB_TOKEN?: string;
 
   // Vars (wrangler.jsonc)
   DISCORD_APPLICATION_ID: string;
   DISCORD_PUBLIC_KEY: string;
+  /** The server the bot lives in. Needed for the welcome posts and the roles. */
+  DISCORD_GUILD_ID?: string;
+  /** Where new members are welcomed. Leave empty to switch the welcome posts off. */
+  CHANNEL_WELCOME?: string;
+  /** The channel that lists the learning roadmaps, linked from the welcome post. */
+  CHANNEL_ROADMAPS?: string;
+  /** "on" to let members link their GitHub account. Also needs DISCORD_CLIENT_SECRET. */
+  LINKING?: string;
+  /** JSON in wrangler.jsonc, so it arrives as an array. A string is accepted too. */
+  ROLE_TIERS?: RoleTier[] | string;
   CHANNEL_RELEASES: string;
   CHANNEL_STARTER_ISSUES: string;
   CHANNEL_MERGED_PRS: string;
@@ -92,6 +113,11 @@ export interface Config {
   starterLabels: string[];
   /** Lowercased GitHub logins that never get a shoutout or a leaderboard row. */
   excludedUsers: Set<string>;
+  guildId: string;
+  welcomeChannel: string;
+  roadmapsChannel: string;
+  /** Lowest tier first. */
+  roleTiers: RoleTier[];
   /** Oldest first. */
   programs: Program[];
   finalResultsNote: string;
@@ -133,6 +159,10 @@ export function getConfig(env: Env): Config {
     repos,
     starterLabels: list(env.STARTER_LABELS).map((l) => l.toLowerCase()),
     excludedUsers: new Set(list(env.EXCLUDED_USERS).map((u) => u.toLowerCase())),
+    guildId: env.DISCORD_GUILD_ID ?? "",
+    welcomeChannel: env.CHANNEL_WELCOME ?? "",
+    roadmapsChannel: env.CHANNEL_ROADMAPS ?? "",
+    roleTiers: array(env.ROLE_TIERS).sort((a, b) => a.minPrs - b.minPrs),
     programs,
     finalResultsNote: (env.FINAL_RESULTS_NOTE ?? "").trim(),
     publicUrl: (env.PUBLIC_URL ?? "").replace(/\/+$/, ""),

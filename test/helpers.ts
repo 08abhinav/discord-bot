@@ -55,6 +55,13 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & K
     EXCLUDED_USERS: "anurag629",
     PROGRAMS: [OCTOBER],
     PUBLIC_URL: "https://bot.example",
+    DISCORD_GUILD_ID: "guild-1",
+    CHANNEL_WELCOME: "chan-welcome",
+    CHANNEL_ROADMAPS: "chan-roadmaps",
+    ROLE_TIERS: [
+      { minPrs: 5, role: "role-top", name: "Top Contributor" },
+      { minPrs: 1, role: "role-contributor", name: "Contributor" },
+    ],
     ROADMAPS,
     CHECKIN_UTC_OFFSET_MINUTES: "330",
     DISCORD_INVITE: "https://discord.gg/example",
@@ -66,7 +73,19 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & K
 export interface RecordedCall {
   url: string;
   method: string;
+  /** Parsed JSON, or the fields of a form-encoded body. */
   body: any;
+  /** The Authorization header, when the call had one. */
+  auth?: string;
+}
+
+function parseBody(body: unknown): unknown {
+  if (typeof body !== "string") return undefined;
+  try {
+    return JSON.parse(body);
+  } catch {
+    return Object.fromEntries(new URLSearchParams(body));
+  }
 }
 
 /**
@@ -83,12 +102,13 @@ export function mockFetch(
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method ?? "GET";
-    const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
-    calls.push({ url: url.href, method, body });
+    const body = parseBody(init?.body);
+    const auth = new Headers(init?.headers).get("Authorization") ?? undefined;
+    calls.push({ url: url.href, method, body, auth });
     if (url.hostname === "api.github.com") {
       return new Response(JSON.stringify(github(url)), { status: 200 });
     }
-    const override = discord({ url: url.href, method, body });
+    const override = discord({ url: url.href, method, body, auth });
     if (override) return override;
     return new Response(JSON.stringify({ id: `msg-${nextId++}` }), { status: 200 });
   };

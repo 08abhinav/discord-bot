@@ -166,3 +166,27 @@ ${links.others.length ? `<section class="others">\n<h2>Other programs</h2>\n<ul>
 </body>
 </html>`;
 }
+
+/** A small page with a heading and a few paragraphs, for the result of /link. Everything is escaped. */
+export function noticePage(title: string, lines: string[], ok: boolean): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>${escapeHtml(title)}</title>
+<style>${STYLE}</style>
+</head>
+<body>
+<main>
+<p class="eyebrow">CODERCOPS community</p>
+<h1>${escapeHtml(title)}</h1>
+<section class="rules">
+${lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("\n")}
+</section>
+<p class="status ${ok ? "running" : ""}">${ok ? "Done" : "Not linked"}</p>
+</main>
+</body>
+</html>`;
+}

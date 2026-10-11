@@ -8,12 +8,31 @@
     // Every day at 04:30 UTC (10:00 IST). On Mondays it posts the leaderboards
     // and the learning streaks; on any day it posts the final results of a
     // program that has just ended. Keep in sync with DAILY_CRON in src/index.ts.
-    "crons": ["30 4 * * *"]
+    //
+    // Every minute: looks for new members to welcome. Keep in sync with
+    // WELCOME_CRON in src/index.ts.
+    "crons": ["30 4 * * *", "* * * * *"]
   },
   "kv_namespaces": [{ "binding": "STATE", "id": "a930275781aa44f682ebe9a201d217c7" }],
   "vars": {
     "DISCORD_APPLICATION_ID": "1192400864573403166",
     "DISCORD_PUBLIC_KEY": "371c6c8be1275687285e87e2d76c1a00bb7e640f5382d2309660ac08036aad67",
+    "DISCORD_GUILD_ID": "1126926837239533728",
+    // New members get a welcome post here (#introductions). Leave empty to
+    // switch that off. Needs the Server Members intent on the application.
+    "CHANNEL_WELCOME": "1484138729256783872",
+    // #roadmaps, linked from the welcome post.
+    "CHANNEL_ROADMAPS": "1558902089051148409",
+    // "on" lets members link their GitHub account with /link. It also needs
+    // the DISCORD_CLIENT_SECRET secret and the redirect URL
+    // {PUBLIC_URL}/link/callback under OAuth2 > Redirects in the developer portal.
+    "LINKING": "off",
+    // Roles for linked members, by merged PRs in REPOS. The bot's own role has
+    // to sit above these and needs Manage Roles.
+    "ROLE_TIERS": [
+      { "minPrs": 1, "role": "1558921141094187098", "name": "Contributor" },
+      { "minPrs": 5, "role": "1558921056121651251", "name": "Top Contributor" }
+    ],
     "CHANNEL_RELEASES": "1558894544618004651",
     "CHANNEL_STARTER_ISSUES": "1558894547873046598",
     "CHANNEL_MERGED_PRS": "1558894551006056538",
@@ -91,4 +110,5 @@
   }
   // Secrets, set with `wrangler secret put`:
   //   DISCORD_BOT_TOKEN, GITHUB_WEBHOOK_SECRET, and optionally GITHUB_TOKEN
+  //   and DISCORD_CLIENT_SECRET (for /link)
 }
