@@ -38,6 +38,8 @@ export interface Env {
   LEADERBOARD_MIN_PRS: string;
   LEADERBOARD_TOP_N: string;
   LEADERBOARD_REWARD: string;
+  /** Optional extra line for the leaderboard footer, e.g. who the reward comes from. */
+  LEADERBOARD_NOTE?: string;
   /** JSON in wrangler.jsonc, so it arrives as an array. A string is accepted too. */
   ROADMAPS: Roadmap[] | string;
   /** Offset of the community's time zone from UTC, in minutes. Decides when a check-in day ends. */
@@ -58,6 +60,7 @@ export interface Config {
     minPrs: number;
     topN: number;
     reward: string;
+    note: string;
   };
   roadmaps: Roadmap[];
   checkinUtcOffsetMinutes: number;
@@ -83,6 +86,7 @@ export function getConfig(env: Env): Config {
       minPrs: Number(env.LEADERBOARD_MIN_PRS),
       topN: Number(env.LEADERBOARD_TOP_N),
       reward: env.LEADERBOARD_REWARD,
+      note: (env.LEADERBOARD_NOTE ?? "").trim(),
     },
     roadmaps: typeof env.ROADMAPS === "string" ? (JSON.parse(env.ROADMAPS) as Roadmap[]) : (env.ROADMAPS ?? []),
     checkinUtcOffsetMinutes: Number(env.CHECKIN_UTC_OFFSET_MINUTES ?? 0),

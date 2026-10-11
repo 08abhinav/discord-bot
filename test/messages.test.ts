@@ -82,7 +82,7 @@ describe("mergedPrMessage", () => {
 
   it("adds the running count when it's known", () => {
     const text = mergedPrMessage(pr, { count: 3, label: "Hacktoberfest 2026" }).embeds?.[0]?.description ?? "";
-    expect(text).toContain("That's their 3rd merged PR for Hacktoberfest 2026.");
+    expect(text).toContain("That's their 3rd merged PR on the Hacktoberfest 2026 leaderboard.");
   });
 });
 
@@ -96,13 +96,20 @@ describe("leaderboardMessage", () => {
     expect(embed?.description).toBe("1. **ada** · 6 merged PRs · in the top 5\n2. **bob** · 2 merged PRs\n3. **cy** · 1 merged PR");
     expect(embed?.footer?.text).toContain("at least 5 merged PRs labeled hacktoberfest-accepted");
     expect(embed?.footer?.text).toContain("a CODERCOPS T-shirt and stickers");
+    // The footer says who the reward comes from, so nobody takes it for Hacktoberfest swag.
+    expect(embed?.footer?.text?.endsWith("This swag comes from CODERCOPS, separate from Hacktoberfest.")).toBe(true);
+  });
+
+  it("leaves the footer note out when none is configured", () => {
+    const plain = getConfig(makeEnv({ LEADERBOARD_NOTE: undefined }));
+    expect(leaderboardMessage(board, plain).embeds?.[0]?.footer?.text?.endsWith("Ties go to whoever got there first.")).toBe(true);
   });
 
   it("announces winners in the final results", () => {
     const embed = leaderboardMessage(board, cfg, { final: true }).embeds?.[0];
     expect(embed?.title).toBe("Hacktoberfest 2026 leaderboard: final results");
     expect(embed?.description).toContain("1. **ada** · 6 merged PRs · winner");
-    expect(embed?.description).toContain("Congratulations to **ada**.");
+    expect(embed?.description).toContain("Congratulations to **ada**. We'll reach out on GitHub to send you a CODERCOPS T-shirt and stickers.");
   });
 
   it("handles a final result with no qualifiers and an empty board", () => {

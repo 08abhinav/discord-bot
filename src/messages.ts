@@ -68,13 +68,13 @@ export function mergedPrMessage(
 ): MessagePayload {
   let description = `**${escapeMarkdown(pr.login)}** got a PR merged in **${pr.repo}**: [${escapeMarkdown(truncate(pr.title, 200))}](${pr.url})`;
   if (countInWindow && countInWindow.count > 0) {
-    description += `\nThat's their ${ordinal(countInWindow.count)} merged PR for ${countInWindow.label}.`;
+    description += `\nThat's their ${ordinal(countInWindow.count)} merged PR on the ${countInWindow.label} leaderboard.`;
   }
   return { embeds: [{ description, color: COLOR.merged }] };
 }
 
 export function leaderboardMessage(board: Leaderboard, cfg: Config, opts: { final?: boolean; limit?: number } = {}): MessagePayload {
-  const { title, minPrs, topN, reward, label } = cfg.leaderboard;
+  const { title, minPrs, topN, reward, label, note } = cfg.leaderboard;
   const shown = board.rows.slice(0, opts.limit ?? 10);
   const lines = shown.map((row, i) => {
     const prs = `${row.count} merged ${row.count === 1 ? "PR" : "PRs"}`;
@@ -91,7 +91,7 @@ export function leaderboardMessage(board: Leaderboard, cfg: Config, opts: { fina
     if (opts.final) {
       description +=
         winners.length > 0
-          ? `\n\nCongratulations to ${winners.map((w) => `**${escapeMarkdown(w.login)}**`).join(", ")}. We'll reach out on GitHub about your ${reward}.`
+          ? `\n\nCongratulations to ${winners.map((w) => `**${escapeMarkdown(w.login)}**`).join(", ")}. We'll reach out on GitHub to send you ${reward}.`
           : `\n\nNobody reached ${minPrs} merged PRs this time. Thank you to everyone who contributed.`;
     }
   }
@@ -101,7 +101,7 @@ export function leaderboardMessage(board: Leaderboard, cfg: Config, opts: { fina
     description: truncate(description, 4000),
     color: COLOR.gold,
     footer: {
-      text: `Top ${topN} with at least ${minPrs} merged PRs labeled ${label} get ${reward}. Ties go to whoever got there first.`,
+      text: `Top ${topN} with at least ${minPrs} merged PRs labeled ${label} get ${reward}. Ties go to whoever got there first.${note ? ` ${note}` : ""}`,
     },
     timestamp: board.generatedAt,
   };

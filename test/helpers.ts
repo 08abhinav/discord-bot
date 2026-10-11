@@ -47,6 +47,7 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & K
     LEADERBOARD_MIN_PRS: "5",
     LEADERBOARD_TOP_N: "5",
     LEADERBOARD_REWARD: "a CODERCOPS T-shirt and stickers",
+    LEADERBOARD_NOTE: "This swag comes from CODERCOPS, separate from Hacktoberfest.",
     ROADMAPS,
     CHECKIN_UTC_OFFSET_MINUTES: "330",
     ...overrides,

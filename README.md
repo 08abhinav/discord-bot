@@ -36,6 +36,8 @@ A pull request counts when it was merged inside the event window (UTC), in one o
 
 People are ranked by how many PRs they got merged. A tie goes to whoever reached that count first. Only contributors with at least `LEADERBOARD_MIN_PRS` merged PRs can be among the `LEADERBOARD_TOP_N` winners, so there can be fewer winners than that.
 
+The reward is CODERCOPS's own. It comes from our open source program and is separate from Hacktoberfest and whatever Hacktoberfest gives its participants. `LEADERBOARD_NOTE` puts that sentence under every leaderboard post.
+
 Everything is in the `vars` block of `wrangler.jsonc`.
 
 ## Check-in rules

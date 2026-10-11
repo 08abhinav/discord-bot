@@ -137,7 +137,7 @@ describe("merged pull requests", () => {
     expect(await handleGithubEvent("pull_request", prEvent(), env, cfg)).toBe("posted merged pull request");
     const post = fetched.discord()[0];
     expect(post?.url).toBe("https://discord.com/api/v10/channels/chan-merged/messages");
-    expect(post?.body.embeds[0].description).toContain("That's their 3rd merged PR for Hacktoberfest 2026.");
+    expect(post?.body.embeds[0].description).toContain("That's their 3rd merged PR on the Hacktoberfest 2026 leaderboard.");
   });
 
   it("doesn't double count when search already includes this PR", async () => {
