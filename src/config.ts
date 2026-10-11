@@ -40,6 +40,10 @@ export interface Env {
   LEADERBOARD_REWARD: string;
   /** Optional extra line for the leaderboard footer, e.g. who the reward comes from. */
   LEADERBOARD_NOTE?: string;
+  /** Invite link shown on the public leaderboard page. */
+  DISCORD_INVITE: string;
+  /** Where the public page sends people to find an issue. */
+  ISSUES_URL: string;
   /** JSON in wrangler.jsonc, so it arrives as an array. A string is accepted too. */
   ROADMAPS: Roadmap[] | string;
   /** Offset of the community's time zone from UTC, in minutes. Decides when a check-in day ends. */

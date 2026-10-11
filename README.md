@@ -7,6 +7,7 @@ The bot behind the open source channels on the [CODERCOPS Discord server](https:
 - **Merged PRs** get a shoutout in `#merged-prs`.
 - **`/issues`** lists the open starter issues nobody has claimed yet. **`/leaderboard`** shows who has the most merged PRs in the current event.
 - A **weekly leaderboard** is posted while an event such as Hacktoberfest is running, and the final results once it ends.
+- The same ranking is public at [`/leaderboard`](https://codercops-discord-bot.copscoder.workers.dev/leaderboard), with a JSON version at `/leaderboard.json`.
 - **`/checkin`** logs a day on one of our learning roadmaps. The bot opens a log thread for each learner, adds every day to it and keeps their streak. **`/streaks`** shows who's on a roll, and the weekly post includes the streak board.
 
 It runs on Cloudflare Workers. There is no server to keep alive and no Discord gateway connection: Discord and GitHub both call the Worker over HTTPS.
@@ -17,6 +18,7 @@ It runs on Cloudflare Workers. There is no server to keep alive and no Discord g
 | --- | --- | --- |
 | `POST /interactions` | Discord, when someone runs a slash command | The Ed25519 signature is checked, the command is acknowledged right away, and the reply is filled in once GitHub has answered. |
 | `POST /github` | GitHub webhooks (`release`, `issues`, `pull_request`) | The HMAC signature is checked, then the event becomes a new or edited Discord message. |
+| `GET /leaderboard`, `GET /leaderboard.json` | Anyone | The current ranking as a page or as JSON. No scripts, no cookies, cached for five minutes. |
 | cron | Cloudflare, Mondays 04:30 UTC and Nov 1 | Posts the leaderboard and the learning streaks. |
 
 A small KV namespace remembers which Discord message belongs to which issue, caches the leaderboard for a few minutes, and stores each learner's check-in progress.
@@ -27,6 +29,7 @@ The code is split so the logic is easy to test:
 - `src/webhook.ts` decides what each GitHub event means.
 - `src/messages.ts` builds every Discord message. It has no I/O.
 - `src/leaderboard.ts` ranks contributors.
+- `src/page.ts` builds the public leaderboard page and its JSON. It has no I/O either.
 - `src/checkin.ts` holds the check-in rules and the streak ranking.
 - `src/github.ts` and `src/discord.ts` are thin API clients.
 

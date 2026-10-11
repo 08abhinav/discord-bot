@@ -3,7 +3,9 @@ import { runCommand, type CommandData, type CommandUser } from "./commands";
 import { getConfig, type Env } from "./config";
 import { editInteractionReply, sendMessage } from "./discord";
 import { getLeaderboard } from "./leaderboard";
+import { GithubError } from "./github";
 import { leaderboardMessage, streaksMessage } from "./messages";
+import { leaderboardJson, leaderboardPage } from "./page";
 import { verifyDiscordRequest, verifyGithubSignature } from "./verify";
 import { handleGithubEvent } from "./webhook";
 
@@ -86,11 +88,48 @@ async function handleGithubWebhook(request: Request, env: Env): Promise<Response
   }
 }
 
+// The public leaderboard, as a page for people and as JSON for anything else.
+async function handleLeaderboardPage(request: Request, env: Env, asJson: boolean): Promise<Response> {
+  const cfg = getConfig(env);
+  // Browsers and the edge may reuse the response for five minutes.
+  const cache = "public, max-age=300";
+  try {
+    const board = await getLeaderboard(env, cfg);
+    if (asJson) {
+      return new Response(JSON.stringify(leaderboardJson(board, cfg)), {
+        headers: { "Content-Type": "application/json", "Cache-Control": cache, "Access-Control-Allow-Origin": "*" },
+      });
+    }
+    const self = new URL("/leaderboard", request.url).href;
+    const html = leaderboardPage(board, cfg, { issues: env.ISSUES_URL, discord: env.DISCORD_INVITE, self });
+    return new Response(html, {
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": cache,
+        // Nothing on the page runs scripts or loads anything but GitHub avatars.
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src https://github.com https://avatars.githubusercontent.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+      },
+    });
+  } catch (err) {
+    const limited = err instanceof GithubError && (err.status === 403 || err.status === 429);
+    console.error("leaderboard page failed", err);
+    return new Response(limited ? "GitHub is rate limiting us. Try again in a minute." : "The leaderboard is unavailable right now.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Retry-After": "60" },
+    });
+  }
+}
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (request.method === "POST" && pathname === "/interactions") return handleInteraction(request, env, ctx);
     if (request.method === "POST" && pathname === "/github") return handleGithubWebhook(request, env);
+    if (request.method === "GET" && (pathname === "/leaderboard" || pathname === "/leaderboard.json")) {
+      return handleLeaderboardPage(request, env, pathname.endsWith(".json"));
+    }
     if (request.method === "GET" && pathname === "/") {
       return json({ name: "codercops-discord-bot", source: "https://github.com/codercops/discord-bot" });
     }

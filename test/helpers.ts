@@ -50,6 +50,8 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & K
     LEADERBOARD_NOTE: "This swag comes from CODERCOPS, separate from Hacktoberfest.",
     ROADMAPS,
     CHECKIN_UTC_OFFSET_MINUTES: "330",
+    DISCORD_INVITE: "https://discord.gg/example",
+    ISSUES_URL: "https://github.com/search?q=example",
     ...overrides,
   } as Env & { STATE: FakeKV & KVNamespace };
 }

@@ -31,6 +31,9 @@
     "LEADERBOARD_REWARD": "a CODERCOPS T-shirt and stickers",
     // The reward is ours, not Hacktoberfest's. Say so wherever the leaderboard is shown.
     "LEADERBOARD_NOTE": "This swag comes from CODERCOPS's own open source program. It is separate from Hacktoberfest and its rewards.",
+    // Links on the public leaderboard page (/leaderboard).
+    "DISCORD_INVITE": "https://discord.gg/mpGdJyjaRQ",
+    "ISSUES_URL": "https://github.com/search?q=org%3Acodercops+label%3Ahacktoberfest+state%3Aopen+no%3Aassignee&type=issues",
     // Learning roadmaps for /checkin. `forum` is the forum channel that holds
     // the log threads, `tag` the forum tag put on new threads.
     "ROADMAPS": [
