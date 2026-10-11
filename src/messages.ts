@@ -298,6 +298,8 @@ export function meReply(input: {
   merged: number;
   /** Roles handed out just now. */
   newRoles: string[];
+  /** Maintainers aren't on the leaderboard and don't get the contributor roles. */
+  maintainer?: boolean;
   standing?: {
     program: Program;
     status: ProgramStatus;
@@ -313,6 +315,7 @@ export function meReply(input: {
     `Merged PRs in our repos: **${input.merged}**.`,
   ];
   if (input.newRoles.length) lines.push(`You now have the ${joinNames(input.newRoles.map((r) => `**${r}**`))} role.`);
+  if (input.maintainer) lines.push("You're a maintainer, so you're not on the leaderboard and the contributor roles aren't for you.");
 
   const s = input.standing;
   if (s) {

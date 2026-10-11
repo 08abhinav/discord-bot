@@ -8,7 +8,7 @@ import { getLeaderboard } from "./leaderboard";
 import { getLink, linkedMembers, removeLink } from "./links";
 import { checkinReply, leaderboardMessage, linkPrompt, meReply, starterIssuesReply, streaksMessage } from "./messages";
 import { authorizeUrl, linkingEnabled, signState } from "./oauth";
-import { grantEarnedRoles, removeTierRoles } from "./roles";
+import { grantEarnedRoles, isMaintainer, removeTierRoles } from "./roles";
 import { currentProgram, findProgram, leaderboardUrl, programStatus } from "./programs";
 
 export interface CommandData {
@@ -94,12 +94,15 @@ export async function runCommand(
         if (!link) return { content: "You haven't linked a GitHub account yet. Run `/link` first." };
         const merged = await countMergedPrs(env, cfg, link.githubLogin);
         // Catches up on a role if a merge was missed.
-        const newRoles = await grantEarnedRoles(env, cfg, user.id, merged).catch((err) => {
+        const newRoles = await grantEarnedRoles(env, cfg, link, merged).catch((err) => {
           console.error("granting roles failed", err);
           return [] as string[];
         });
         const program = currentProgram(cfg, now);
-        if (!program) return meReply({ login: link.githubLogin, merged, newRoles });
+        // Maintainers aren't ranked, so there's no standing to show them.
+        if (!program || isMaintainer(cfg, link.githubLogin)) {
+          return meReply({ login: link.githubLogin, merged, newRoles, maintainer: isMaintainer(cfg, link.githubLogin) });
+        }
         const board = await getLeaderboard(env, cfg, program);
         const index = board.rows.findIndex((r) => r.login.toLowerCase() === link.githubLogin.toLowerCase());
         return meReply({

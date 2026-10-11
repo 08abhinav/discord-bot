@@ -164,7 +164,7 @@ async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promis
   if (link) {
     try {
       const earlier = await countMergedPrs(env, cfg, pr.user.login, pr.html_url);
-      newRoles = await grantEarnedRoles(env, cfg, link.discordId, earlier + 1);
+      newRoles = await grantEarnedRoles(env, cfg, link, earlier + 1);
     } catch (err) {
       console.error("granting roles failed", err);
     }

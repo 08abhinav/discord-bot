@@ -96,7 +96,7 @@ What the bot keeps: the member's Discord id, their GitHub username and GitHub's 
 What linking does:
 
 - Merged PR shoutouts and leaderboard posts show the Discord member next to the GitHub login. The public leaderboard page shows GitHub logins only.
-- `ROLE_TIERS` in `wrangler.jsonc` lists roles by merged PR count in `REPOS` (at any time, not per program). Ours are Contributor at 1 and Top Contributor at 5. A role is given when the PR that earns it is merged, and at linking time for PRs that were merged before.
+- `ROLE_TIERS` in `wrangler.jsonc` lists roles by merged PR count in `REPOS` (at any time, not per program). Ours are Contributor at 1 and Top Contributor at 5. A role is given when the PR that earns it is merged, and at linking time for PRs that were merged before. Maintainers in `EXCLUDED_USERS` can link too, but don't get these roles.
 - `/me` shows the member's merged PRs, their place in the current program and how many more they need to qualify.
 
 To switch it on:

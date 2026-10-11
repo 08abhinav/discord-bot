@@ -200,6 +200,17 @@ describe("GET /link/callback", () => {
     }
   });
 
+  it("links a maintainer without giving them the contributor roles", async () => {
+    const fetched = mockFetch(search(40), discordApi({ connections: [{ type: "github", id: "1", name: "Anurag629", verified: true }] }));
+    const res = await callback({ code: "c", state: await validState() });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("is now linked to github.com/Anurag629.");
+    expect(html).not.toContain("Contributor role");
+    expect((await getLink(env, "42"))?.githubLogin).toBe("Anurag629");
+    expect(fetched.calls.some((c) => c.url.includes("/roles/") || c.url.includes("/members/"))).toBe(false);
+  });
+
   it("keeps the link when the roles can't be handed out", async () => {
     mockFetch(() => {
       throw new Error("GitHub is down");
@@ -302,6 +313,20 @@ describe("/link, /unlink and /me", () => {
     );
     const lifetime = fetched.calls.find((c) => c.url.includes("api.github.com") && decodeURIComponent(c.url).includes("author:Ada"));
     expect(decodeURIComponent(lifetime!.url).replace(/\+/g, " ")).toContain("is:pr is:merged author:Ada repo:codercops/chatcops repo:codercops/ogcops repo:codercops/toolbelt");
+  });
+
+  it("/me tells a maintainer why they have no standing and no roles", async () => {
+    await saveLink(env, { ...ada, githubLogin: "anurag629" });
+    const fetched = mockFetch(search(40), discordApi({ memberRoles: [] }));
+    const reply = await run("me");
+    expect(reply.content).toBe(
+      [
+        "You're linked to **anurag629** on GitHub.",
+        "Merged PRs in our repos: **40**.",
+        "You're a maintainer, so you're not on the leaderboard and the contributor roles aren't for you.",
+      ].join("\n")
+    );
+    expect(fetched.calls.some((c) => c.url.includes("/roles/"))).toBe(false);
   });
 
   it("/me covers people with nothing counted, people in the top N, and a program that's over", async () => {
