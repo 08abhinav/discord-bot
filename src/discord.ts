@@ -19,8 +19,18 @@ export interface MessagePayload {
   allowed_mentions?: { parse: string[] };
 }
 
-// The bot never pings anyone: usernames in messages are GitHub logins, not Discord users.
+// The bot never pings anyone. GitHub logins are plain text, and Discord mentions in
+// check-in posts show the member's name without notifying them.
 const NO_MENTIONS = { parse: [] as string[] };
+
+export class DiscordError extends Error {
+  constructor(
+    public status: number,
+    message: string
+  ) {
+    super(message);
+  }
+}
 
 async function botRequest<T>(env: Env, method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API}${path}`, {
@@ -33,7 +43,7 @@ async function botRequest<T>(env: Env, method: string, path: string, body?: unkn
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new Error(`Discord ${res.status} for ${method} ${path}`);
+    throw new DiscordError(res.status, `Discord ${res.status} for ${method} ${path}`);
   }
   return (await res.json()) as T;
 }
@@ -57,6 +67,25 @@ export async function editMessage(
     ...payload,
     allowed_mentions: NO_MENTIONS,
   });
+}
+
+/** Starts a post (thread) in a forum channel and returns the thread id. */
+export async function createForumPost(
+  env: Env,
+  forumId: string,
+  post: { name: string; appliedTags: string[]; message: MessagePayload }
+): Promise<string> {
+  const thread = await botRequest<{ id: string }>(env, "POST", `/channels/${forumId}/threads`, {
+    name: post.name,
+    applied_tags: post.appliedTags,
+    message: { ...post.message, allowed_mentions: NO_MENTIONS },
+  });
+  return thread.id;
+}
+
+/** Unarchives a thread so it can take messages again. */
+export async function reopenThread(env: Env, threadId: string): Promise<void> {
+  await botRequest(env, "PATCH", `/channels/${threadId}`, { archived: false });
 }
 
 /** Fills in a deferred interaction response. Uses the interaction token, not the bot token. */

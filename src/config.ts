@@ -1,3 +1,16 @@
+export interface Roadmap {
+  /** Stable id, used in storage keys and as the slash command choice value. */
+  id: string;
+  name: string;
+  /** How many days the roadmap has. */
+  days: number;
+  url: string;
+  /** The forum channel that holds each learner's log thread. */
+  forum: string;
+  /** Forum tag to put on new log threads, if the forum has one for this roadmap. */
+  tag?: string;
+}
+
 export interface Env {
   STATE: KVNamespace;
 
@@ -25,6 +38,10 @@ export interface Env {
   LEADERBOARD_MIN_PRS: string;
   LEADERBOARD_TOP_N: string;
   LEADERBOARD_REWARD: string;
+  /** JSON in wrangler.jsonc, so it arrives as an array. A string is accepted too. */
+  ROADMAPS: Roadmap[] | string;
+  /** Offset of the community's time zone from UTC, in minutes. Decides when a check-in day ends. */
+  CHECKIN_UTC_OFFSET_MINUTES: string;
 }
 
 export interface Config {
@@ -42,6 +59,8 @@ export interface Config {
     topN: number;
     reward: string;
   };
+  roadmaps: Roadmap[];
+  checkinUtcOffsetMinutes: number;
 }
 
 const list = (value: string | undefined): string[] =>
@@ -65,5 +84,7 @@ export function getConfig(env: Env): Config {
       topN: Number(env.LEADERBOARD_TOP_N),
       reward: env.LEADERBOARD_REWARD,
     },
+    roadmaps: typeof env.ROADMAPS === "string" ? (JSON.parse(env.ROADMAPS) as Roadmap[]) : (env.ROADMAPS ?? []),
+    checkinUtcOffsetMinutes: Number(env.CHECKIN_UTC_OFFSET_MINUTES ?? 0),
   };
 }

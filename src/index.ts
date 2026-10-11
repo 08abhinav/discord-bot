@@ -1,8 +1,9 @@
-import { runCommand, type CommandData } from "./commands";
+import { listCheckins, localDate, rankStreaks } from "./checkin";
+import { runCommand, type CommandData, type CommandUser } from "./commands";
 import { getConfig, type Env } from "./config";
 import { editInteractionReply, sendMessage } from "./discord";
 import { getLeaderboard } from "./leaderboard";
-import { leaderboardMessage } from "./messages";
+import { leaderboardMessage, streaksMessage } from "./messages";
 import { verifyDiscordRequest, verifyGithubSignature } from "./verify";
 import { handleGithubEvent } from "./webhook";
 
@@ -19,6 +20,27 @@ const EPHEMERAL = 64;
 /** The cron that posts the final results. Must match wrangler.jsonc. */
 export const FINAL_RESULTS_CRON = "30 4 1 11 *";
 
+interface DiscordUser {
+  id: string;
+  username: string;
+  global_name?: string | null;
+}
+
+interface Interaction {
+  type: number;
+  token: string;
+  data?: CommandData;
+  /** Present when the command is run in a server. */
+  member?: { nick?: string | null; user: DiscordUser };
+}
+
+// Commands that act on a person only work inside the server, so DMs give null.
+function commandUser(interaction: Interaction): CommandUser | null {
+  const member = interaction.member;
+  if (!member) return null;
+  return { id: member.user.id, name: member.nick || member.user.global_name || member.user.username };
+}
+
 async function handleInteraction(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const body = await request.text();
   const valid = await verifyDiscordRequest(
@@ -29,7 +51,7 @@ async function handleInteraction(request: Request, env: Env, ctx: ExecutionConte
   );
   if (!valid) return new Response("invalid request signature", { status: 401 });
 
-  const interaction = JSON.parse(body) as { type: number; token: string; data?: CommandData };
+  const interaction = JSON.parse(body) as Interaction;
   if (interaction.type === PING) return json({ type: PONG });
 
   if (interaction.type === APPLICATION_COMMAND && interaction.data) {
@@ -38,7 +60,7 @@ async function handleInteraction(request: Request, env: Env, ctx: ExecutionConte
     // the reply once GitHub has answered.
     ctx.waitUntil(
       (async () => {
-        const reply = await runCommand(data, env, getConfig(env));
+        const reply = await runCommand(data, commandUser(interaction), env, getConfig(env));
         await editInteractionReply(env, interaction.token, reply);
       })().catch((err) => console.error("interaction reply failed", err))
     );
@@ -75,7 +97,8 @@ export default {
     return new Response("not found", { status: 404 });
   },
 
-  // Weekly leaderboard while the event runs, and the final results once it's over.
+  // Weekly: the event leaderboard while the event runs, plus the learning streaks.
+  // Once, right after the event: the final results.
   async scheduled(controller: ScheduledController, env: Env): Promise<void> {
     const cfg = getConfig(env);
     const now = new Date(controller.scheduledTime);
@@ -84,9 +107,21 @@ export default {
     const weekAfterEnd = new Date(end.getTime() + 7 * 24 * 60 * 60 * 1000);
     // The final cron repeats every year, so only honor it right after the event.
     const due = final ? now > end && now <= weekAfterEnd : now >= start && now <= end;
-    if (!due) return;
 
-    const board = await getLeaderboard(env, cfg, { fresh: true });
-    await sendMessage(env, env.CHANNEL_LEADERBOARD, leaderboardMessage(board, cfg, { final }));
+    if (due) {
+      const board = await getLeaderboard(env, cfg, { fresh: true });
+      await sendMessage(env, env.CHANNEL_LEADERBOARD, leaderboardMessage(board, cfg, { final }));
+    }
+
+    // The weekly cron also posts the learning streaks, as long as someone
+    // checked in during the past week.
+    if (!final) {
+      const today = localDate(now, cfg.checkinUtcOffsetMinutes);
+      const weekAgo = localDate(new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), cfg.checkinUtcOffsetMinutes);
+      const ranked = rankStreaks(await listCheckins(env), today);
+      if (ranked.some((r) => r.lastDate >= weekAgo)) {
+        await sendMessage(env, env.CHANNEL_LEADERBOARD, streaksMessage(cfg, ranked));
+      }
+    }
   },
 } satisfies ExportedHandler<Env>;

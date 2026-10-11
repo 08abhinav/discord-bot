@@ -7,6 +7,7 @@ The bot behind the open source channels on the [CODERCOPS Discord server](https:
 - **Merged PRs** get a shoutout in `#merged-prs`.
 - **`/issues`** lists the open starter issues nobody has claimed yet. **`/leaderboard`** shows who has the most merged PRs in the current event.
 - A **weekly leaderboard** is posted while an event such as Hacktoberfest is running, and the final results once it ends.
+- **`/checkin`** logs a day on one of our learning roadmaps. The bot opens a log thread for each learner, adds every day to it and keeps their streak. **`/streaks`** shows who's on a roll, and the weekly post includes the streak board.
 
 It runs on Cloudflare Workers. There is no server to keep alive and no Discord gateway connection: Discord and GitHub both call the Worker over HTTPS.
 
@@ -16,9 +17,9 @@ It runs on Cloudflare Workers. There is no server to keep alive and no Discord g
 | --- | --- | --- |
 | `POST /interactions` | Discord, when someone runs a slash command | The Ed25519 signature is checked, the command is acknowledged right away, and the reply is filled in once GitHub has answered. |
 | `POST /github` | GitHub webhooks (`release`, `issues`, `pull_request`) | The HMAC signature is checked, then the event becomes a new or edited Discord message. |
-| cron | Cloudflare, Mondays 04:30 UTC and Nov 1 | Posts the leaderboard. |
+| cron | Cloudflare, Mondays 04:30 UTC and Nov 1 | Posts the leaderboard and the learning streaks. |
 
-A small KV namespace remembers which Discord message belongs to which issue and caches the leaderboard for a few minutes.
+A small KV namespace remembers which Discord message belongs to which issue, caches the leaderboard for a few minutes, and stores each learner's check-in progress.
 
 The code is split so the logic is easy to test:
 
@@ -26,6 +27,7 @@ The code is split so the logic is easy to test:
 - `src/webhook.ts` decides what each GitHub event means.
 - `src/messages.ts` builds every Discord message. It has no I/O.
 - `src/leaderboard.ts` ranks contributors.
+- `src/checkin.ts` holds the check-in rules and the streak ranking.
 - `src/github.ts` and `src/discord.ts` are thin API clients.
 
 ## Leaderboard rules
@@ -35,6 +37,15 @@ A pull request counts when it was merged inside the event window (UTC), in one o
 People are ranked by how many PRs they got merged. A tie goes to whoever reached that count first. Only contributors with at least `LEADERBOARD_MIN_PRS` merged PRs can be among the `LEADERBOARD_TOP_N` winners, so there can be fewer winners than that.
 
 Everything is in the `vars` block of `wrangler.jsonc`.
+
+## Check-in rules
+
+The roadmaps are listed in `ROADMAPS` in `wrangler.jsonc`, each with its length, its forum channel and the forum tag for new log threads.
+
+- One check-in per day and roadmap counts. The day ends at midnight in the community's time zone (`CHECKIN_UTC_OFFSET_MINUTES`, 330 for IST).
+- The day number continues from the last one. A learner can pass a higher `day` if they started before joining or skipped ahead, but can't go backwards.
+- A streak continues only if the last check-in was the day before. Miss a day and it starts again at 1; the day number and the best streak are kept.
+- Each learner gets one thread per roadmap. If it was deleted, the next check-in opens a new one.
 
 ## Development
 

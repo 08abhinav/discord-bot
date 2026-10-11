@@ -15,8 +15,9 @@ if (!token || !guildId) {
 
 // wrangler.jsonc allows comments, so strip them before parsing.
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
-const { DISCORD_APPLICATION_ID: appId, REPOS } = config.vars;
+const { DISCORD_APPLICATION_ID: appId, REPOS, ROADMAPS } = config.vars;
 const repos = REPOS.split(',').map((r) => r.trim());
+const longestRoadmap = Math.max(...ROADMAPS.map((r) => r.days));
 
 const commands = [
   {
@@ -33,6 +34,31 @@ const commands = [
     ],
   },
   { name: 'leaderboard', description: 'Show who has the most merged PRs this event' },
+  {
+    name: 'checkin',
+    description: 'Log today on a learning roadmap and keep your streak alive',
+    // 0 = guild only: a check-in posts into a forum in the server.
+    contexts: [0],
+    options: [
+      {
+        type: 3,
+        name: 'roadmap',
+        description: 'Which roadmap you are following',
+        required: true,
+        choices: ROADMAPS.map((r) => ({ name: r.name, value: r.id })),
+      },
+      { type: 3, name: 'note', description: 'What you did today', required: false, max_length: 500 },
+      {
+        type: 4, // INTEGER
+        name: 'day',
+        description: 'Only if you are not continuing from your last day number',
+        required: false,
+        min_value: 1,
+        max_value: longestRoadmap,
+      },
+    ],
+  },
+  { name: 'streaks', description: 'Show the learning streaks for every roadmap' },
 ];
 
 const res = await fetch(`https://discord.com/api/v10/applications/${appId}/guilds/${guildId}/commands`, {

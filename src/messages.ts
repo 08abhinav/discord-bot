@@ -1,6 +1,7 @@
 // Pure functions that turn GitHub data into Discord messages. No I/O here, so
 // everything in this file is easy to unit test.
-import type { Config } from "./config";
+import type { CheckinRecord, CheckinResult } from "./checkin";
+import type { Config, Roadmap } from "./config";
 import type { Embed, MessagePayload } from "./discord";
 import type { StarterIssue } from "./github";
 import type { Leaderboard } from "./leaderboard";
@@ -128,4 +129,79 @@ export function starterIssuesReply(cfg: Config, issuesByRepo: { repo: string; is
     content: "Comment on an issue on GitHub to claim it. One issue at a time, please.",
     embeds,
   };
+}
+
+// ---- learning check-ins ----
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** The first message of a learner's log thread. The mention shows their name but doesn't ping. */
+export function checkinThreadIntro(userId: string, roadmap: Roadmap): MessagePayload {
+  return {
+    content: `<@${userId}>'s log for **${roadmap.name}** (${roadmap.days} days).\nRoadmap: <${roadmap.url}>\n\nEvery \`/checkin\` lands here. Reply with notes, code, screenshots or questions.`,
+  };
+}
+
+export function checkinPost(input: {
+  userId: string;
+  roadmap: Roadmap;
+  record: CheckinRecord;
+  note?: string;
+  finished: boolean;
+}): MessagePayload {
+  const { record, roadmap } = input;
+  const headline = input.finished
+    ? `**Day ${record.day} of ${roadmap.days}. Finished!**`
+    : `**Day ${record.day} of ${roadmap.days}** · ${plural(record.streak, "day")} streak`;
+  const note = input.note?.trim();
+  // Quote the note line by line so it can't break out of the block quote.
+  const quoted = note ? "\n" + truncate(note, 500).split("\n").map((line) => `> ${line}`).join("\n") : "";
+  return { content: `${headline} · <@${input.userId}>${quoted}` };
+}
+
+/** What the learner sees after running /checkin. Only they can see it. */
+export function checkinReply(result: CheckinResult, roadmap: Roadmap, threadId?: string): MessagePayload {
+  const thread = threadId ? ` Your log: <#${threadId}>` : "";
+  if (result.ok) {
+    const { record } = result;
+    if (result.finished) {
+      return { content: `Day ${record.day} of ${roadmap.days}. You finished **${roadmap.name}**. That took real work, well done.${thread}` };
+    }
+    const best = record.streak === record.bestStreak && record.streak > 1 ? " That's your best streak so far." : "";
+    return {
+      content: `Checked in: day ${record.day} of ${roadmap.days} on **${roadmap.name}**. Streak: ${plural(record.streak, "day")}.${best}${thread}`,
+    };
+  }
+  switch (result.reason) {
+    case "already-today":
+      return { content: `You already checked in today (day ${result.record?.day}). Come back tomorrow, and add anything else in your log thread.${thread}` };
+    case "already-finished":
+      return { content: `You've already finished **${roadmap.name}**. Pick another roadmap, or help someone who's still on it.${thread}` };
+    case "day-out-of-range":
+      return { content: `**${roadmap.name}** has days 1 to ${roadmap.days}. Pick a day in that range.` };
+    case "day-not-ahead":
+      return { content: `Your last check-in was day ${result.record?.day}, so the next one has to be a later day. Leave \`day\` empty to continue from there.` };
+  }
+}
+
+export function streaksMessage(
+  cfg: Config,
+  ranked: (CheckinRecord & { live: number })[],
+  opts: { limit?: number } = {}
+): MessagePayload {
+  const embeds: Embed[] = [];
+  for (const roadmap of cfg.roadmaps) {
+    const rows = ranked.filter((r) => r.roadmap === roadmap.id);
+    if (rows.length === 0) continue;
+    const lines = rows.slice(0, opts.limit ?? 10).map((r, i) => {
+      const progress = r.day >= roadmap.days ? "finished" : `day ${r.day} of ${roadmap.days}`;
+      const streak = r.live > 0 ? `${plural(r.live, "day")} streak` : "streak ended";
+      return `${i + 1}. **${escapeMarkdown(r.name)}** · ${streak} · ${progress}`;
+    });
+    embeds.push({ title: roadmap.name, url: roadmap.url, description: lines.join("\n"), color: COLOR.gold });
+  }
+  if (embeds.length === 0) {
+    return { content: "Nobody has checked in yet. Run `/checkin` to start your streak." };
+  }
+  return { content: "Learning streaks. Check in every day with `/checkin` to keep yours alive.", embeds };
 }

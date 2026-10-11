@@ -14,7 +14,16 @@ export class FakeKV {
   async delete(key: string): Promise<void> {
     this.store.delete(key);
   }
+  async list(opts: { prefix?: string } = {}) {
+    const keys = [...this.store.keys()].filter((k) => k.startsWith(opts.prefix ?? "")).map((name) => ({ name }));
+    return { keys, list_complete: true, cursor: "" };
+  }
 }
+
+export const ROADMAPS = [
+  { id: "ai-engineer-100", name: "100 Days of AI Engineer", days: 100, url: "https://example.com/ai", forum: "forum-ai", tag: "tag-ai" },
+  { id: "gen-ai-21", name: "Gen AI Engineer in 3 Weeks", days: 21, url: "https://example.com/genai", forum: "forum-logs", tag: "tag-genai" },
+];
 
 export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & KVNamespace } {
   return {
@@ -38,6 +47,8 @@ export function makeEnv(overrides: Partial<Env> = {}): Env & { STATE: FakeKV & K
     LEADERBOARD_MIN_PRS: "5",
     LEADERBOARD_TOP_N: "5",
     LEADERBOARD_REWARD: "a CODERCOPS T-shirt and stickers",
+    ROADMAPS,
+    CHECKIN_UTC_OFFSET_MINUTES: "330",
     ...overrides,
   } as Env & { STATE: FakeKV & KVNamespace };
 }
@@ -52,7 +63,11 @@ export interface RecordedCall {
  * Replaces global fetch. Discord calls are recorded and answered with a fake
  * message id; GitHub calls are answered by `github(url)`.
  */
-export function mockFetch(github: (url: URL) => unknown = () => ({ total_count: 0, items: [] })) {
+export function mockFetch(
+  github: (url: URL) => unknown = () => ({ total_count: 0, items: [] }),
+  /** Return a Response to override the default Discord answer for a call. */
+  discord: (call: RecordedCall) => Response | undefined = () => undefined
+) {
   const calls: RecordedCall[] = [];
   let nextId = 1;
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -63,11 +78,14 @@ export function mockFetch(github: (url: URL) => unknown = () => ({ total_count: 
     if (url.hostname === "api.github.com") {
       return new Response(JSON.stringify(github(url)), { status: 200 });
     }
+    const override = discord({ url: url.href, method, body });
+    if (override) return override;
     return new Response(JSON.stringify({ id: `msg-${nextId++}` }), { status: 200 });
   };
   globalThis.fetch = impl as typeof fetch;
   return {
     calls,
     discord: () => calls.filter((c) => c.url.startsWith("https://discord.com/")),
+    clear: () => void calls.splice(0),
   };
 }

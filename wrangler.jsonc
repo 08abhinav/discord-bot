@@ -28,7 +28,45 @@
     "LEADERBOARD_END": "2026-10-31T23:59:59Z",
     "LEADERBOARD_MIN_PRS": "5",
     "LEADERBOARD_TOP_N": "5",
-    "LEADERBOARD_REWARD": "a CODERCOPS T-shirt and stickers"
+    "LEADERBOARD_REWARD": "a CODERCOPS T-shirt and stickers",
+    // Learning roadmaps for /checkin. `forum` is the forum channel that holds
+    // the log threads, `tag` the forum tag put on new threads.
+    "ROADMAPS": [
+      {
+        "id": "ai-engineer-100",
+        "name": "100 Days of AI Engineer",
+        "days": 100,
+        "url": "https://github.com/anurag629/100DaysOfAIEngineer",
+        "forum": "1438449770376069143",
+        "tag": "1558902091781513340"
+      },
+      {
+        "id": "system-design-60",
+        "name": "System Design in 60 Days",
+        "days": 60,
+        "url": "https://anurag629.github.io/system-design-60-days/",
+        "forum": "1558902094235308072",
+        "tag": "1558902094235308073"
+      },
+      {
+        "id": "data-science-50",
+        "name": "50 Days of Data Science",
+        "days": 50,
+        "url": "https://github.com/anurag629/50-Days-Data-Science",
+        "forum": "1558902094235308072",
+        "tag": "1558902094235308074"
+      },
+      {
+        "id": "gen-ai-21",
+        "name": "Gen AI Engineer in 3 Weeks",
+        "days": 21,
+        "url": "https://github.com/anurag629/gen_ai_engineer",
+        "forum": "1558902094235308072",
+        "tag": "1558902094235308075"
+      }
+    ],
+    // A check-in day ends at midnight in this time zone. 330 = IST (UTC+5:30).
+    "CHECKIN_UTC_OFFSET_MINUTES": "330"
   }
   // Secrets, set with `wrangler secret put`:
   //   DISCORD_BOT_TOKEN, GITHUB_WEBHOOK_SECRET, and optionally GITHUB_TOKEN
