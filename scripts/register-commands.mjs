@@ -74,11 +74,14 @@ const commands = [
 ];
 
 // These only make sense once linking is switched on in wrangler.jsonc.
+// LINK_PREVIEW=1 registers them for server admins only, to try the flow out
+// before everyone sees the commands. Run again without it to open them up.
 if (LINKING === 'on') {
+  const preview = process.env.LINK_PREVIEW === '1' ? { default_member_permissions: '0' } : {};
   commands.push(
-    { name: 'link', description: 'Link your GitHub account to your Discord account', contexts: [0] },
-    { name: 'unlink', description: 'Remove the link between your GitHub and Discord accounts', contexts: [0] },
-    { name: 'me', description: 'Show your merged PRs and where you stand', contexts: [0] }
+    { name: 'link', description: 'Link your GitHub account to your Discord account', contexts: [0], ...preview },
+    { name: 'unlink', description: 'Remove the link between your GitHub and Discord accounts', contexts: [0], ...preview },
+    { name: 'me', description: 'Show your merged PRs and where you stand', contexts: [0], ...preview }
   );
 }
 

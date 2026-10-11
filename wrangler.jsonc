@@ -26,7 +26,7 @@
     // "on" lets members link their GitHub account with /link. It also needs
     // the DISCORD_CLIENT_SECRET secret and the redirect URL
     // {PUBLIC_URL}/link/callback under OAuth2 > Redirects in the developer portal.
-    "LINKING": "off",
+    "LINKING": "on",
     // Roles for linked members, by merged PRs in REPOS. The bot's own role has
     // to sit above these and needs Manage Roles.
     "ROLE_TIERS": [

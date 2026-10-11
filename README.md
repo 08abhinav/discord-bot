@@ -103,7 +103,7 @@ To switch it on:
 
 1. In the Developer Portal, under OAuth2, add `{PUBLIC_URL}/link/callback` to the redirects.
 2. `npx wrangler secret put DISCORD_CLIENT_SECRET` with the client secret from the same page.
-3. Set `LINKING` to `"on"` in `wrangler.jsonc`, deploy, and run `npm run register` so `/link`, `/unlink` and `/me` appear.
+3. Set `LINKING` to `"on"` in `wrangler.jsonc`, deploy, and run `npm run register` so `/link`, `/unlink` and `/me` appear. With `LINK_PREVIEW=1` in front, only server admins see them, which is handy for a first try.
 4. Give the bot Manage Roles and keep its own role above the tier roles.
 
 ## Development
