@@ -19,6 +19,11 @@
   // The workers.dev address stays on for Discord and GitHub, which call it
   // directly, and redirects old page links here.
   "routes": [{ "pattern": "oss.codercops.com", "custom_domain": true }],
+  // Wrangler switches the workers.dev address off as soon as there is a route,
+  // unless told otherwise. Discord's interactions endpoint, the GitHub
+  // webhooks and the /link callback all point at it, so it has to stay on.
+  "workers_dev": true,
+  "preview_urls": false,
   "kv_namespaces": [{ "binding": "STATE", "id": "a930275781aa44f682ebe9a201d217c7" }],
   "vars": {
     "DISCORD_APPLICATION_ID": "1192400864573403166",
