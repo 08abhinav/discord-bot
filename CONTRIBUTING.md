@@ -7,6 +7,34 @@ Thanks for wanting to help with the bot.
 - Check the open issues. If you want to work on one, comment on it and wait until it's assigned to you. One issue at a time, please.
 - For something that isn't an issue yet, open one first so we can agree on it.
 
+## Ground rules
+
+### AI tools
+
+You can use AI tools (Copilot, ChatGPT, Claude, Cursor and so on). Two conditions:
+
+1. Say so in the PR. If a tool wrote or rewrote more than autocomplete-sized pieces, fill in the "AI assistance" line in the PR template: which tool, and what you used it for.
+2. You own every line. Run it, test it, and be ready to explain it in review. If you can't explain a change, the PR gets closed.
+
+PRs that are unreviewed AI output (code that doesn't run, invented APIs, a description that doesn't match the diff, unrelated rewrites) are treated as spam.
+
+### Spam
+
+These get closed and labeled `spam`:
+
+- a PR for an issue that isn't assigned to you, or that isn't linked to an issue at all
+- formatting, whitespace or typo-only changes nobody asked for
+- one fix split into several PRs
+- a copy of someone else's PR
+- claiming a pile of issues at once, or bulk and automated submissions
+- untested generated code
+
+### Reviews
+
+Every PR needs a "How I tested this" line: what you ran to check it works.
+
+I review most PRs within a few days. Please don't ping repeatedly or DM maintainers about a review. If three days pass with no reply, one follow-up comment on the PR is fine.
+
 ## Making a change
 
 ```bash
