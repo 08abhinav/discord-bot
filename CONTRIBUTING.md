@@ -4,7 +4,7 @@ Thanks for wanting to help with the bot.
 
 ## Before you start
 
-- Check the open issues. If you want to work on one, comment on it and wait until it's assigned to you. One issue at a time, please.
+- Check the open issues. If you want to work on one, comment on it and wait until it's assigned to you. One issue at a time, please. After 3 merged PRs with us you can hold two.
 - For something that isn't an issue yet, open one first so we can agree on it.
 
 ## Hacktoberfest and the October program
