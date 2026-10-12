@@ -120,7 +120,9 @@ async function handleLeaderboardPage(request: Request, env: Env, id: string | un
       .filter((p) => p.id !== program.id)
       .reverse()
       .map((p) => ({ title: p.title, path: `/leaderboard/${p.id}` }));
-    const html = leaderboardPage(board, program, { issues: env.ISSUES_URL, discord: env.DISCORD_INVITE, self, others }, now);
+    const html = leaderboardPage(board, program, { issues: env.ISSUES_URL, discord: env.DISCORD_INVITE, self, others }, now, {
+      linking: linkingEnabled(env),
+    });
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",

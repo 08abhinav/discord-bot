@@ -121,7 +121,14 @@ export interface PageLinks {
   others: { title: string; path: string }[];
 }
 
-export function leaderboardPage(board: Leaderboard, program: Program, links: PageLinks, now: Date): string {
+export function leaderboardPage(
+  board: Leaderboard,
+  program: Program,
+  links: PageLinks,
+  now: Date,
+  /** `linking`: members can link their GitHub account with /link, which is how we find a winner on Discord. */
+  opts: { linking?: boolean } = {}
+): string {
   const { title, label, start, end, minPrs, topN, reward, note } = program;
   const heading = `${title} leaderboard`;
   const repos = program.repos.join(", ").replace(/, ([^,]*)$/, " and $1");
@@ -171,6 +178,7 @@ ${board.rows.length ? `<ol class="board">\n${rows}\n</ol>` : `<div class="board"
 <p>A pull request counts when it's merged into one of the repos above during the window and carries the <code>${escapeHtml(label)}</code> label. Only PRs for issues that were assigned to you count.</p>
 <p>The top ${topN} contributors with at least ${minPrs} merged PRs get ${escapeHtml(reward)}. Ties go to whoever got there first.</p>
 ${note ? `<p>${escapeHtml(note)}</p>` : ""}
+${opts.linking ? `<p>We contact the winners by Discord DM. <a href="${escapeHtml(links.discord)}">Join the server</a> and run <code>/link</code> there, so we know which Discord account is yours.</p>` : ""}
 </section>
 <div class="cta">
 <a class="primary" href="${escapeHtml(links.issues)}">Find an issue</a>

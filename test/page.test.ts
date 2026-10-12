@@ -86,6 +86,16 @@ describe("leaderboardPage", () => {
     expect(html).toContain("This swag comes from CODERCOPS, separate from Hacktoberfest.");
   });
 
+  it("says how winners are contacted, only when members can link their account", () => {
+    expect(html).not.toContain("/link");
+    const linking = leaderboardPage(board, program, links, during, { linking: true });
+    expect(linking).toContain(
+      '<p>We contact the winners by Discord DM. <a href="https://discord.gg/example">Join the server</a> and run <code>/link</code> there, so we know which Discord account is yours.</p>'
+    );
+    // Still true after the end, until the winners have heard from us.
+    expect(leaderboardPage(board, program, links, after, { linking: true })).toContain("We contact the winners by Discord DM.");
+  });
+
   it("links to issues, Discord and the platform, with escaped URLs", () => {
     expect(html).toContain('href="https://github.com/search?q=x&amp;type=issues"');
     expect(html).toContain('href="https://discord.gg/example"');

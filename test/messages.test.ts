@@ -108,7 +108,9 @@ describe("leaderboardMessage", () => {
   it("lists people in order and marks who is in the running", () => {
     const embed = leaderboardMessage(board, program).embeds?.[0];
     expect(embed?.title).toBe("Hacktoberfest 2026 leaderboard");
-    expect(embed?.description).toBe("1. **ada** · 6 merged PRs · in the top 5\n2. **bob** · 2 merged PRs\n3. **cy** · 1 merged PR");
+    expect(embed?.description).toBe(
+      "1. **ada** · 6 merged PRs · in the top 5\n2. **bob** · 2 merged PRs · 3 more to qualify\n3. **cy** · 1 merged PR · 4 more to qualify"
+    );
     expect(embed?.footer?.text).toContain("at least 5 merged PRs labeled hacktoberfest-accepted");
     expect(embed?.footer?.text).toContain("a CODERCOPS T-shirt and stickers");
     // The footer says who the reward comes from, so nobody takes it for Hacktoberfest swag.
@@ -137,6 +139,9 @@ describe("leaderboardMessage", () => {
     );
     // Nothing about /link unless linking is on.
     expect(embed?.description).not.toContain("/link");
+    // The countdown stops with the program.
+    expect(embed?.description).toContain("2. **bob** · 2 merged PRs\n");
+    expect(embed?.description).not.toContain("more to qualify");
   });
 
   it("asks winners who haven't linked to run /link, since the form goes out by DM", () => {
