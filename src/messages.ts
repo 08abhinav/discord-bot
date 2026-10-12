@@ -81,11 +81,21 @@ export function mergedPrMessage(
     newRoles?: string[];
   },
   /** How many counted PRs the author has in the leaderboard window, when known. */
-  countInWindow?: { count: number; label: string }
+  countInWindow?: {
+    count: number;
+    label: string;
+    /** Set when this merge is the one that takes them to the program's minimum. */
+    qualified?: { topN: number; reward: string; note?: string };
+  }
 ): MessagePayload {
   let description = `${person(pr.login, pr.discordId)} got a PR merged in **${pr.repo}**: [${escapeMarkdown(truncate(pr.title, 200))}](${pr.url})`;
   if (countInWindow && countInWindow.count > 0) {
     description += `\nThat's their ${ordinal(countInWindow.count)} merged PR on the ${countInWindow.label} leaderboard.`;
+    const q = countInWindow.qualified;
+    if (q) {
+      // Reaching the minimum isn't a win yet: only the top N get the reward.
+      description += `\nWith ${countInWindow.count} they now qualify for ${q.reward}, which goes to the top ${q.topN} when the program ends.${q.note ? ` ${q.note}` : ""}`;
+    }
   }
   if (pr.newRoles?.length) {
     description += `\nThat earns them the ${joinNames(pr.newRoles.map((r) => `**${r}**`))} role.`;

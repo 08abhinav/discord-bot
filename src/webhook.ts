@@ -132,7 +132,7 @@ async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promis
   if (e.action !== "closed" || !pr.merged || !ours(cfg, e.repository)) return "ignored pull request";
   if (pr.user.type === "Bot" || cfg.excludedUsers.has(pr.user.login.toLowerCase())) return "ignored pull request author";
 
-  let countInWindow: { count: number; label: string } | undefined;
+  let countInWindow: Parameters<typeof mergedPrMessage>[1];
   const mergedAt = pr.merged_at ? new Date(pr.merged_at) : new Date();
   // The program this PR counts for, if any.
   const program = cfg.programs.find(
@@ -151,7 +151,13 @@ async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promis
       const others = (await searchMergedPrs(env, cfg, program)).filter(
         (p) => p.login.toLowerCase() === login && p.url !== pr.html_url
       );
-      countInWindow = { count: others.length + 1, label: program.title };
+      const count = others.length + 1;
+      countInWindow = {
+        count,
+        label: program.title,
+        // Said once, on the merge that takes them to the minimum.
+        qualified: count === program.minPrs ? { topN: program.topN, reward: program.reward, note: program.note } : undefined,
+      };
     } catch {
       // The shoutout matters more than the count; post it without one.
     }

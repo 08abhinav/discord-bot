@@ -83,6 +83,19 @@ describe("mergedPrMessage", () => {
   it("adds the running count when it's known", () => {
     const text = mergedPrMessage(pr, { count: 3, label: "Hacktoberfest 2026" }).embeds?.[0]?.description ?? "";
     expect(text).toContain("That's their 3rd merged PR on the Hacktoberfest 2026 leaderboard.");
+    expect(text).not.toContain("qualify");
+  });
+
+  it("says so when this merge takes them to the minimum, and where the reward comes from", () => {
+    const qualified = { topN: 5, reward: "a CODERCOPS T-shirt and stickers", note: "This swag comes from CODERCOPS, separate from Hacktoberfest." };
+    const text = mergedPrMessage(pr, { count: 5, label: "Hacktoberfest 2026", qualified }).embeds?.[0]?.description ?? "";
+    expect(text.split("\n")).toEqual([
+      expect.stringContaining("got a PR merged in **chatcops**"),
+      "That's their 5th merged PR on the Hacktoberfest 2026 leaderboard.",
+      "With 5 they now qualify for a CODERCOPS T-shirt and stickers, which goes to the top 5 when the program ends. This swag comes from CODERCOPS, separate from Hacktoberfest.",
+    ]);
+    const plain = mergedPrMessage(pr, { count: 5, label: "Hacktoberfest 2026", qualified: { ...qualified, note: undefined } }).embeds?.[0]?.description ?? "";
+    expect(plain.endsWith("which goes to the top 5 when the program ends.")).toBe(true);
   });
 });
 

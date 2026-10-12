@@ -149,6 +149,27 @@ describe("merged pull requests", () => {
     expect(fetched.discord()[0]?.body.embeds[0].description).toContain("That's their 1st merged PR");
   });
 
+  it("says they qualify on the merge that reaches the minimum, and only on that one", async () => {
+    const earlier = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        html_url: `https://github.com/codercops/toolbelt/pull/${i + 1}`,
+        user: { login: "ada" },
+        pull_request: { merged_at: `2026-10-0${i + 1}T00:00:00Z` },
+      }));
+    const description = async (others: number) => {
+      const fetched = mockFetch(() => ({ total_count: others, items: earlier(others) }));
+      await handleGithubEvent("pull_request", prEvent(), env, cfg);
+      return fetched.discord()[0]?.body.embeds[0].description as string;
+    };
+    expect(await description(3)).not.toContain("qualify");
+    const fifth = await description(4);
+    expect(fifth).toContain("That's their 5th merged PR");
+    expect(fifth).toContain(
+      "With 5 they now qualify for a CODERCOPS T-shirt and stickers, which goes to the top 5 when the program ends. This swag comes from CODERCOPS, separate from Hacktoberfest."
+    );
+    expect(await description(5)).not.toContain("qualify");
+  });
+
   it("searches only our repos, the event label and the event window", async () => {
     const fetched = mockFetch();
     await handleGithubEvent("pull_request", prEvent(), env, cfg);
