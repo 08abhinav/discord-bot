@@ -9,12 +9,12 @@ const now = new Date("2026-10-12T10:00:00Z");
 const linkingEnv = () => makeEnv({ LINKING: "on", DISCORD_CLIENT_SECRET: "client-secret" });
 const run = (env: ReturnType<typeof makeEnv>) => runCommand({ name: "help" }, { id: "42", name: "Ada" }, env, getConfig(env), now);
 
-/** The "/command" — description lines of a help reply. */
+/** The "`/command`: description" lines of a help reply. */
 function commandsIn(content: string | undefined): { name: string; description: string }[] {
   return (content ?? "")
     .split("\n")
     .flatMap((line) => {
-      const match = line.match(/^`(\S+)` — (.+)$/);
+      const match = line.match(/^`(\S+)`: (.+)$/);
       return match ? [{ name: match[1]!, description: match[2]! }] : [];
     });
 }

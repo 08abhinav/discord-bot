@@ -317,17 +317,17 @@ export function linkPrompt(url: string, currentLogin?: string): MessagePayload {
  */
 export function helpReply(linking: boolean): MessagePayload {
   const lines = [
-    "`/help` — Show the commands and what they do.",
-    "`/issues` — List open starter issues nobody has claimed yet.",
-    "`/leaderboard` — Show who has the most merged PRs in a contributor program.",
-    "`/checkin` — Log today on a learning roadmap and keep your streak alive.",
-    "`/streaks` — Show the learning streaks for every roadmap.",
+    "`/help`: Show the commands and what they do.",
+    "`/issues`: List open starter issues nobody has claimed yet.",
+    "`/leaderboard`: Show who has the most merged PRs in a contributor program.",
+    "`/checkin`: Log today on a learning roadmap and keep your streak alive.",
+    "`/streaks`: Show the learning streaks for every roadmap.",
   ];
   if (linking) {
     lines.push(
-      "`/link` — Link your GitHub account to your Discord account.",
-      "`/unlink` — Remove the link between your GitHub and Discord accounts.",
-      "`/me` — Show your merged PRs and where you stand."
+      "`/link`: Link your GitHub account to your Discord account.",
+      "`/unlink`: Remove the link between your GitHub and Discord accounts.",
+      "`/me`: Show your merged PRs and where you stand."
     );
   }
   lines.push("", "Spotted a bug or have an idea? Open an issue at https://github.com/codercops/discord-bot");
