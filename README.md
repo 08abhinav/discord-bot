@@ -151,6 +151,7 @@ GITHUB_WEBHOOK_SECRET=...
    npx wrangler secret put GITHUB_WEBHOOK_SECRET
    npx wrangler secret put GITHUB_TOKEN   # optional, raises GitHub's rate limit
    ```
+   `GITHUB_TOKEN` only reads public data, so a fine-grained token with "Public repositories" access and no permissions is enough. If your organization limits how long tokens may live, give it an expiry inside that limit. When GitHub refuses the token (expired, or blocked by the organization), the bot asks again without it.
 5. `npm run deploy`, then set the Worker's `/interactions` URL as the Interactions Endpoint URL of your Discord application.
 6. Register the slash commands: `DISCORD_BOT_TOKEN=... DISCORD_GUILD_ID=... npm run register`.
 7. Add a webhook to each repo that points at the Worker's `/github` URL, with content type `application/json`, your webhook secret, and the `Releases`, `Issues` and `Pull requests` events.

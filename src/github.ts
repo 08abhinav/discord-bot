@@ -10,15 +10,33 @@ export class GithubError extends Error {
   }
 }
 
+/**
+ * True when GitHub turned down the token, not the request: it expired or was
+ * revoked (401), or the organization's token policy blocks it (403 with
+ * requests still left). A 403 with none left, or with Retry-After, is a rate limit.
+ */
+function tokenRefused(res: Response): boolean {
+  if (res.status === 401) return true;
+  return res.status === 403 && res.headers.get("x-ratelimit-remaining") !== "0" && !res.headers.has("retry-after");
+}
+
 async function gh<T>(env: Env, path: string): Promise<T> {
+  const url = `https://api.github.com${path}`;
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
     // GitHub rejects requests without a User-Agent.
     "User-Agent": "codercops-discord-bot",
   };
-  if (env.GITHUB_TOKEN) headers.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
-  const res = await fetch(`https://api.github.com${path}`, { headers });
+  let res = await fetch(url, {
+    headers: env.GITHUB_TOKEN ? { ...headers, Authorization: `Bearer ${env.GITHUB_TOKEN}` } : headers,
+  });
+  // Everything we read is public, so a token GitHub refuses must not take the bot down with it.
+  if (env.GITHUB_TOKEN && tokenRefused(res)) {
+    console.warn(`GitHub refused GITHUB_TOKEN (${res.status}) for ${path.split("?")[0]}, retrying without it`);
+    await res.body?.cancel();
+    res = await fetch(url, { headers });
+  }
   if (!res.ok) {
     throw new GithubError(res.status, `GitHub ${res.status} for ${path.split("?")[0]}`);
   }
