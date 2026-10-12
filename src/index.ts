@@ -7,6 +7,7 @@ import { GithubError } from "./github";
 import { linkedMembers } from "./links";
 import { completeLink } from "./linking";
 import { leaderboardMessage, LINK_BUTTON_ID, streaksMessage } from "./messages";
+import { linkingEnabled } from "./oauth";
 import { cardSvg } from "./card";
 import { contributorPage, leaderboardJson, leaderboardPage, noticePage, standing } from "./page";
 import { currentProgram, findProgram, leaderboardUrl, programStatus } from "./programs";
@@ -317,7 +318,13 @@ async function dailyPosts(env: Env, cfg: Config, now: Date): Promise<void> {
       await sendMessage(
         env,
         env.CHANNEL_LEADERBOARD,
-        leaderboardMessage(board, program, { final: true, url, finalNote: cfg.finalResultsNote, members })
+        leaderboardMessage(board, program, {
+          final: true,
+          url,
+          finalNote: cfg.finalResultsNote,
+          members,
+          linking: linkingEnabled(env),
+        })
       );
       await env.STATE.put(posted, now.toISOString());
     }
