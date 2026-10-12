@@ -54,6 +54,6 @@ npm run typecheck && npm test
 - Never commit tokens or secrets. Local secrets go in `.dev.vars`, which is gitignored.
 - Use conventional commit titles (`feat:`, `fix:`, `docs:`, `chore:`), and open the pull request against `main` with `Closes #<issue number>`.
 
-CI runs the typecheck and the tests on every pull request. A second check ("Claim check") fails if the linked issue isn't assigned to you.
+CI runs the typecheck and the tests on every pull request. A second check ("Claim check") fails if the linked issue isn't assigned to you. A third ("Description check") fails while the "How I tested this" or "AI assistance" section of the PR description is missing or empty.
 
 You can't run the bot against our Discord server, and you don't need to. The tests replace Discord, GitHub and KV with fakes. For the leaderboard page, `npm run dev` serves it at `http://localhost:8787/leaderboard` with no secrets.
