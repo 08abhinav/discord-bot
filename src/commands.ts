@@ -59,10 +59,14 @@ export async function runCommand(
       case "issues": {
         const picked = data.options?.find((o) => o.name === "repo")?.value;
         const repos = typeof picked === "string" && cfg.repos.includes(picked) ? [picked] : cfg.repos;
+        // Anything that isn't a starter label is ignored, so everything is listed.
+        const pickedLabel = data.options?.find((o) => o.name === "label")?.value;
+        const label = typeof pickedLabel === "string" ? pickedLabel.toLowerCase() : "";
+        const labels = cfg.starterLabels.includes(label) ? [label] : cfg.starterLabels;
         const issuesByRepo = await Promise.all(
-          repos.map(async (repo) => ({ repo, issues: await listStarterIssues(env, cfg, repo) }))
+          repos.map(async (repo) => ({ repo, issues: await listStarterIssues(env, cfg, repo, labels) }))
         );
-        return starterIssuesReply(cfg, issuesByRepo);
+        return starterIssuesReply(cfg, issuesByRepo, labels);
       }
       case "leaderboard": {
         const program = findProgram(cfg, option("program")) ?? currentProgram(cfg, now);

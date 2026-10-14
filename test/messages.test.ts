@@ -183,6 +183,16 @@ describe("starterIssuesReply", () => {
     expect(reply.embeds?.[1]?.description).toContain("Nothing unassigned right now");
   });
 
+  it("links to the chosen label only, in the title and in the \"more\" line", () => {
+    const issues = Array.from({ length: 30 }, (_, i) => issue(30 - i));
+    const embed = starterIssuesReply(cfg, [{ repo: "toolbelt", issues }], ["help wanted"]).embeds?.[0];
+    const links = [embed?.url, embed?.description?.match(/\[and \d+ more\]\(([^)]+)\)/)?.[1]].map((u) => decodeURIComponent(u ?? ""));
+    for (const link of links) {
+      expect(link).toContain('no:assignee label:"help wanted"');
+      expect(link).not.toContain("good first issue");
+    }
+  });
+
   it("caps long lists and says how many more there are", () => {
     const issues = Array.from({ length: 30 }, (_, i) => issue(30 - i));
     const embed = starterIssuesReply(cfg, [{ repo: "toolbelt", issues }]).embeds?.[0];

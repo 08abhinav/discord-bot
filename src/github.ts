@@ -63,11 +63,19 @@ interface ApiIssue {
 const labelNames = (labels: ApiIssue["labels"]): string[] =>
   labels.map((l) => (typeof l === "string" ? l : (l.name ?? ""))).filter(Boolean);
 
-/** Open, unassigned issues in one repo that carry any of the starter labels. Newest first. */
-export async function listStarterIssues(env: Env, cfg: Config, repo: string): Promise<StarterIssue[]> {
+/**
+ * Open, unassigned issues in one repo that carry any of `labels` (default: all
+ * the starter labels). Newest first.
+ */
+export async function listStarterIssues(
+  env: Env,
+  cfg: Config,
+  repo: string,
+  labels: string[] = cfg.starterLabels
+): Promise<StarterIssue[]> {
   const seen = new Map<number, StarterIssue>();
   // The issues API ANDs labels together, so ask once per label and merge.
-  for (const label of cfg.starterLabels) {
+  for (const label of labels) {
     const query = new URLSearchParams({ state: "open", assignee: "none", labels: label, per_page: "100" });
     const issues = await gh<ApiIssue[]>(env, `/repos/${cfg.org}/${repo}/issues?${query}`);
     for (const issue of issues) {

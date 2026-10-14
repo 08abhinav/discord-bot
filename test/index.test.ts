@@ -124,6 +124,43 @@ describe("POST /interactions", () => {
   });
 });
 
+describe("/issues label option", () => {
+  async function runIssues(options: { name: string; value: string }[]) {
+    const fetched = mockFetch((url) => (url.pathname.endsWith("/issues") ? [] : { total_count: 0, items: [] }));
+    const { request, publicKey } = await signedDiscordRequest({ type: 2, token: "t", data: { name: "issues", options } });
+    const { ctx, settle } = makeCtx();
+    await worker.fetch(request, makeEnv({ DISCORD_PUBLIC_KEY: publicKey }), ctx);
+    await settle();
+    const asked = fetched.calls
+      .filter((c) => c.url.includes("api.github.com"))
+      .map((c) => new URL(c.url).searchParams.get("labels"));
+    return { asked, embeds: fetched.discord()[0]?.body.embeds as { url: string }[] };
+  }
+
+  it("asks GitHub only for the chosen label and links to it", async () => {
+    const { asked, embeds } = await runIssues([{ name: "label", value: "help wanted" }]);
+    expect(new Set(asked)).toEqual(new Set(["help wanted"]));
+    expect(decodeURIComponent(embeds[0]!.url)).toContain('label:"help wanted"');
+    expect(decodeURIComponent(embeds[0]!.url)).not.toContain("good first issue");
+  });
+
+  it("works together with the repo option", async () => {
+    const { asked, embeds } = await runIssues([
+      { name: "repo", value: "toolbelt" },
+      { name: "label", value: "good first issue" },
+    ]);
+    expect(asked).toEqual(["good first issue"]);
+    expect(embeds).toHaveLength(1);
+  });
+
+  it("lists everything when the option is missing or isn't a starter label", async () => {
+    for (const options of [[], [{ name: "label", value: "bug" }]]) {
+      const { asked } = await runIssues(options);
+      expect(new Set(asked)).toEqual(new Set(["good first issue", "help wanted"]));
+    }
+  });
+});
+
 describe("POST /github", () => {
   it("rejects a bad signature before doing anything", async () => {
     const fetched = mockFetch();

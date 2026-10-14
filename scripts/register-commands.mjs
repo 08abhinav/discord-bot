@@ -15,8 +15,9 @@ if (!token || !guildId) {
 
 // wrangler.jsonc allows comments, so strip them before parsing.
 const config = JSON.parse(readFileSync('wrangler.jsonc', 'utf8').replace(/^\s*\/\/.*$/gm, ''));
-const { DISCORD_APPLICATION_ID: appId, REPOS, ROADMAPS, PROGRAMS, LINKING } = config.vars;
+const { DISCORD_APPLICATION_ID: appId, REPOS, STARTER_LABELS, ROADMAPS, PROGRAMS, LINKING } = config.vars;
 const repos = REPOS.split(',').map((r) => r.trim());
+const starterLabels = STARTER_LABELS.split(',').map((l) => l.trim()).filter(Boolean);
 const longestRoadmap = Math.max(...ROADMAPS.map((r) => r.days));
 
 const commands = [
@@ -31,6 +32,13 @@ const commands = [
         description: 'Only show one repo',
         required: false,
         choices: repos.map((r) => ({ name: r, value: r })),
+      },
+      {
+        type: 3,
+        name: 'label',
+        description: 'Only show one label',
+        required: false,
+        choices: starterLabels.map((l) => ({ name: l, value: l })),
       },
     ],
   },

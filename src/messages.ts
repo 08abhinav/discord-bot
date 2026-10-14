@@ -166,11 +166,15 @@ export function leaderboardMessage(
   return { embeds: [embed] };
 }
 
-export function starterIssuesReply(cfg: Config, issuesByRepo: { repo: string; issues: StarterIssue[] }[]): MessagePayload {
+export function starterIssuesReply(
+  cfg: Config,
+  issuesByRepo: { repo: string; issues: StarterIssue[] }[],
+  labels: string[] = cfg.starterLabels
+): MessagePayload {
   const perRepo = Math.max(3, Math.floor(12 / Math.max(1, issuesByRepo.length)));
   const embeds: Embed[] = issuesByRepo.map(({ repo, issues }) => {
     // A comma between quoted labels means "any of these" in GitHub search.
-    const labelFilter = cfg.starterLabels.map((l) => `"${l}"`).join(",");
+    const labelFilter = labels.map((l) => `"${l}"`).join(",");
     const listUrl = `https://github.com/${cfg.org}/${repo}/issues?q=${encodeURIComponent(`is:issue is:open no:assignee label:${labelFilter}`)}`;
     const lines = issues
       .slice(0, perRepo)
