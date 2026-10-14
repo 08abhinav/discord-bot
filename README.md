@@ -3,10 +3,10 @@
 The bot behind the open source channels on the [CODERCOPS Discord server](https://discord.gg/mpGdJyjaRQ). It watches our public repos ([chatcops](https://github.com/codercops/chatcops), [ogcops](https://github.com/codercops/ogcops), [toolbelt](https://github.com/codercops/toolbelt) and this one) and keeps contributors in the loop:
 
 - **Releases** go to `#releases` with their notes.
-- **Starter issues** (`good first issue` and `help wanted`) go to `#starter-issues`. Each issue gets one message, and the bot edits it when the issue is claimed, freed up or closed, so the channel always shows what's really available.
+- **Starter issues** (`good first issue` and `help wanted`) go to `#starter-issues`. Each issue gets one message, and the bot edits it when the issue is claimed, freed up, closed, or stops being a starter issue (the label is removed, `blocked` is added, or it's deleted or transferred), so the channel always shows what's really available.
 - **Merged PRs** get a shoutout in `#merged-prs`, with the author's count in the running program. The merge that takes someone to the program's minimum says they now qualify.
 - **`/help`** lists every command with a line saying what it does, and points at this repo for bug reports and ideas.
-- **`/issues`** lists the open starter issues nobody has claimed yet. **`/leaderboard`** shows who has the most merged PRs in a contributor program.
+- **`/issues`** lists the open starter issues nobody has claimed yet, for one repo or one label if you pick them. **`/leaderboard`** shows who has the most merged PRs in a contributor program.
 - A **weekly leaderboard** is posted while a program is running, and the final results once it ends.
 - Every program has a public page, for example [CODERCOPS October 2026](https://oss.codercops.com/leaderboard/2026-10), with a JSON version next to it.
 - Every contributor on a leaderboard has a **share card**: a page with their count and rank, and the same thing as an image that shows up when the link is posted on LinkedIn, X or Discord.
