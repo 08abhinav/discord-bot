@@ -245,7 +245,7 @@ async function handleContributor(
   const version = `${row.count}-${rank}-${of}-${status}`;
   const prsQuery = `org:${cfg.org} is:pr is:merged author:${row.login} label:"${program.label}" merged:${program.start.toISOString().slice(0, 10)}..${program.end.toISOString().slice(0, 10)}`;
   const html = contributorPage(
-    { program, row, rank, of },
+    { program, row, rank, of, generatedAt: board.generatedAt },
     {
       self: new URL(path, request.url).href,
       image: new URL(`${path}.png?v=${version}`, request.url).href,
