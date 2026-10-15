@@ -35,6 +35,8 @@ These get closed and labeled `spam`:
 - claiming a pile of issues at once, or bulk and automated submissions
 - untested generated code
 
+Two spam PRs and you won't be assigned more issues this month, and you're out of the CODERCOPS goodies.
+
 ### Reviews
 
 Every PR needs a "How I tested this" line: what you ran to check it works.
