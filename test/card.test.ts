@@ -104,7 +104,8 @@ describe("contributorPage", () => {
     issues: "https://github.com/search?q=issues",
     discord: "https://discord.gg/example",
   };
-  const html = contributorPage({ program, row: row("ada", 4), rank: 1, of: 15 }, links, during);
+  const generatedAt = new Date(during.getTime() - 8 * 60_000).toISOString();
+  const html = contributorPage({ program, row: row("ada", 4), rank: 1, of: 15, generatedAt }, links, during);
 
   it("shows the card and says where the person stands", () => {
     expect(html).toContain("<h1>ada</h1>");
@@ -129,12 +130,28 @@ describe("contributorPage", () => {
   });
 
   it("handles one PR, one contributor and a finished program", () => {
-    const single = contributorPage({ program, row: row("ada", 1), rank: 1, of: 1 }, links, during);
+    const single = contributorPage({ program, row: row("ada", 1), rank: 1, of: 1, generatedAt }, links, during);
     expect(single).toContain("1 merged pull request in Hacktoberfest 2026. 1st of 1 on the leaderboard.");
     expect(single).toContain("of 1 contributor</span>");
-    const ended = contributorPage({ program, row: row("ada", 2), rank: 11, of: 15 }, links, new Date("2026-11-03T00:00:00Z"));
+    const ended = contributorPage({ program, row: row("ada", 2), rank: 11, of: 15, generatedAt }, links, new Date("2026-11-03T00:00:00Z"));
     expect(ended).toContain("11th of 15");
     expect(ended).toContain("<b>Took part</b><span>final result</span>");
+  });
+
+  it("dates the footer by when the board was generated, not when the page was requested", () => {
+    const stamp = `${generatedAt.slice(0, 16).replace("T", " ")} UTC`;
+    expect(html).toContain(`<time datetime="${generatedAt}">${stamp}</time>`);
+    expect(html).not.toContain(during.toISOString());
+  });
+
+  it("still uses the current time for the program status", () => {
+    const late = contributorPage(
+      { program, row: row("ada", 2), rank: 11, of: 15, generatedAt },
+      links,
+      new Date("2026-11-03T00:00:00Z")
+    );
+    expect(late).toContain("<b>Took part</b><span>final result</span>");
+    expect(late).toContain(`datetime="${generatedAt}"`);
   });
 });
 

@@ -237,11 +237,11 @@ export interface ContributorLinks {
 
 /** One contributor's page in a program: their share card, ways to share it, and where they stand. */
 export function contributorPage(
-  input: { program: Program; row: LeaderboardRow; rank: number; of: number },
+  input: { program: Program; row: LeaderboardRow; rank: number; of: number; generatedAt: string },
   links: ContributorLinks,
   now: Date
 ): string {
-  const { program, row, rank, of } = input;
+  const { program, row, rank, of, generatedAt } = input;
   const state = statusLine(program, now);
   const chip = standing(row, program, state.status);
   const login = escapeHtml(row.login);
@@ -253,6 +253,7 @@ export function contributorPage(
   const x = `https://twitter.com/intent/tweet?${new URLSearchParams({ text: shareText, url: links.self })}`;
   const alt = `Share card: ${row.login}, ${prs} in ${program.title}, ${ordinal(rank)} of ${of}.`;
   const file = `codercops-${program.id}-${row.login}.png`;
+  const updated = generatedAt;
 
   return `<!doctype html>
 <html lang="en">
@@ -304,7 +305,7 @@ export function contributorPage(
 <a href="${escapeHtml(links.discord)}">Join the Discord</a>
 <a href="https://www.codercops.com">Hire developers or get hired</a>
 </div>
-<footer>Updated <time datetime="${escapeHtml(now.toISOString())}">${escapeHtml(now.toISOString().slice(0, 16).replace("T", " "))} UTC</time>. Refreshes every few minutes.</footer>
+<footer>Updated <time datetime="${escapeHtml(updated)}">${escapeHtml(updated.slice(0, 16).replace("T", " "))} UTC</time>. Refreshes every few minutes.</footer>
 </main>
 </body>
 </html>`;
