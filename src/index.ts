@@ -245,7 +245,7 @@ async function handleContributor(
   const version = `${row.count}-${rank}-${of}-${status}`;
   const prsQuery = `org:${cfg.org} is:pr is:merged author:${row.login} label:"${program.label}" merged:${program.start.toISOString().slice(0, 10)}..${program.end.toISOString().slice(0, 10)}`;
   const html = contributorPage(
-    { program, row, rank, of },
+    { program, row, rank, of, generatedAt: board.generatedAt },
     {
       self: new URL(path, request.url).href,
       image: new URL(`${path}.png?v=${version}`, request.url).href,
@@ -285,7 +285,7 @@ export default {
     if (person) return handleContributor(request, env, ctx, person[1]!, person[2]!, person[3] !== undefined);
     if (request.method === "GET" && pathname === "/link/callback") return handleLinkCallback(request, env);
     if (request.method === "GET" && pathname === "/") {
-      return json({ name: "codercops-discord-bot", source: "https://github.com/codercops/discord-bot" });
+      return json({ name: "codercops-discord-bot", source: "https://github.com/codercops/discord-bot", commit: env.GIT_SHA || "dev" });
     }
     return new Response("not found", { status: 404 });
   },
