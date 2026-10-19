@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getConfig } from "../src/config";
 import worker from "../src/index";
-import { dateRange, escapeHtml, leaderboardJson, leaderboardPage, standing, statusLine } from "../src/page";
+import { contributorPage, dateRange, escapeHtml, leaderboardJson, leaderboardPage, noticePage, standing, statusLine } from "../src/page";
 import { currentProgram } from "../src/programs";
 import { makeEnv, mockFetch, OCTOBER } from "./helpers";
 
@@ -127,6 +127,35 @@ describe("leaderboardPage", () => {
     const many = leaderboardPage(board, program, { ...links, others: [{ title: "November sprint", path: "/leaderboard/2026-11" }] }, during);
     expect(many).toContain('<li><a href="/leaderboard/2026-11">November sprint</a></li>');
   });
+
+  it("links to the favicon in the head", () => {
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+  });
+});
+
+describe("noticePage", () => {
+  it("links to the favicon in the head", () => {
+    const html = noticePage("Done", ["Everything is linked."], true);
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+  });
+});
+
+describe("contributorPage", () => {
+  it("links to the favicon in the head", () => {
+    const html = contributorPage(
+      { program, row: board.rows[0]!, rank: 1, of: 4, generatedAt: "2026-10-12T04:30:00.000Z" },
+      {
+        self: "https://bot.example/leaderboard/2026-10/u/ada",
+        image: "https://bot.example/leaderboard/2026-10/u/ada.png",
+        board: "/leaderboard/2026-10",
+        prs: "https://github.com/search?q=x",
+        issues: "https://github.com/search?q=x",
+        discord: "https://discord.gg/example",
+      },
+      during
+    );
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+  });
 });
 
 describe("leaderboardJson", () => {
@@ -158,10 +187,12 @@ describe("GET /leaderboard", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/html");
     expect(res.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
+    expect(res.headers.get("Content-Security-Policy")).toContain("img-src 'self'");
     const html = await res.text();
     expect(html).toContain(">ada<");
     expect(html).not.toContain("anurag629");
     expect(html).toContain('content="https://bot.example/leaderboard/2026-10"');
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
 
     await worker.fetch(new Request("https://bot.example/leaderboard"), env, ctx);
     expect(fetched.calls.filter((c) => c.url.includes("api.github.com"))).toHaveLength(1);

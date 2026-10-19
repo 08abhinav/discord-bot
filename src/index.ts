@@ -9,7 +9,7 @@ import { completeLink } from "./linking";
 import { leaderboardMessage, LINK_BUTTON_ID, streaksMessage } from "./messages";
 import { linkingEnabled } from "./oauth";
 import { cardSvg } from "./card";
-import { contributorPage, leaderboardJson, leaderboardPage, noticePage, standing } from "./page";
+import { contributorPage, FAVICON_SVG, leaderboardJson, leaderboardPage, noticePage, standing } from "./page";
 import { currentProgram, findProgram, LEADERBOARD_PATH, leaderboardUrl, programStatus } from "./programs";
 import { verifyDiscordRequest, verifyGithubSignature } from "./verify";
 import { handleGithubEvent, resyncStarterIssues } from "./webhook";
@@ -128,8 +128,8 @@ async function handleLeaderboardPage(request: Request, env: Env, id: string | un
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": cache,
-        // Nothing on the page runs scripts or loads anything but GitHub avatars.
-        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src https://github.com https://avatars.githubusercontent.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+        // Nothing on the page runs scripts or loads anything but the favicon and GitHub avatars.
+        "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' https://github.com https://avatars.githubusercontent.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
         "X-Content-Type-Options": "nosniff",
         "Referrer-Policy": "strict-origin-when-cross-origin",
       },
@@ -154,7 +154,7 @@ async function handleLinkCallback(request: Request, env: Env): Promise<Response>
       // The URL carries a one-time code. Keep it out of caches and referrers.
       "Cache-Control": "no-store",
       "Referrer-Policy": "no-referrer",
-      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -282,6 +282,15 @@ export default {
     const person = request.method === "GET" ? CONTRIBUTOR_PATH.exec(pathname) : null;
     if (person) return handleContributor(request, env, ctx, person[1]!, person[2]!, person[3] !== undefined);
     if (request.method === "GET" && pathname === "/link/callback") return handleLinkCallback(request, env);
+    if (request.method === "GET" && pathname === "/favicon.svg") {
+      return new Response(FAVICON_SVG, {
+        headers: {
+          "Content-Type": "image/svg+xml",
+          "Cache-Control": "public, max-age=86400",
+          "X-Content-Type-Options": "nosniff",
+        },
+      });
+    }
     if (request.method === "GET" && pathname === "/") {
       return json({ name: "codercops-discord-bot", source: "https://github.com/codercops/discord-bot", version, commit: env.GIT_SHA || "dev" });
     }

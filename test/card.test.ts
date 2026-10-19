@@ -179,6 +179,7 @@ describe("GET /leaderboard/{id}/u/{login}", () => {
     expect(res.headers.get("Content-Security-Policy")).toContain("img-src 'self'");
     const html = await res.text();
     expect(html).toContain("<h1>Ada</h1>");
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
     expect(html).toContain("2 merged pull requests in Hacktoberfest 2026. 1st of 2 on the leaderboard.");
     // The image address carries the numbers, so previews refresh when they change.
     expect(html).toContain("https://bot.example/leaderboard/2026-10/u/Ada.png?v=2-1-2-");
