@@ -52,6 +52,7 @@ export function leaderboardJson(board: Leaderboard, program: Program, now: Date)
       mergedPrs: row.count,
       qualifies: row.qualifies,
       inTop: row.winner,
+      prs: row.prs.map(({ repo, number, title, url, mergedAt }) => ({ repo, number, title, url, mergedAt })),
     })),
   };
 }
@@ -67,8 +68,17 @@ a{color:var(--cyan);text-decoration:none}a:hover{text-decoration:underline}
 h1{font:700 clamp(28px,6vw,40px)/1.15 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 12px}
 .lede{color:var(--muted);margin:0 0 32px}
 .board{list-style:none;margin:0 0 32px;padding:0;border:1px solid var(--line);border-radius:12px;background:var(--raise);overflow:hidden}
-.board li{display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--line)}
-.board li:first-child{border-top:0}
+.board>li{border-top:1px solid var(--line)}
+.board>li:first-child{border-top:0}
+.board summary{display:flex;align-items:center;gap:12px;padding:12px 16px;cursor:pointer;list-style:none}
+.board summary::-webkit-details-marker{display:none}
+.board summary::before{content:"";width:7px;height:7px;flex:none;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s}
+.board details[open]>summary::before{transform:rotate(45deg)}
+.board summary:hover{background:var(--bg)}
+.prs{list-style:none;margin:0;padding:4px 16px 14px 56px;display:grid;gap:8px}
+.prs li{font-size:14px;line-height:1.4}
+.prs a{color:var(--fg)}
+.prs .repo{font:600 12px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted);margin-right:8px}
 .rank{width:28px;font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--muted)}
 .board img{width:36px;height:36px;border-radius:50%;background:var(--line)}
 .who{flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -147,7 +157,13 @@ export function leaderboardPage(
       const chip = standing(row, program, state.status);
       const chipHtml = chip ? `<span class="chip ${chip.kind}">${escapeHtml(chip.text)}</span>` : "";
       const card = `<a class="cardlink" href="/leaderboard/${escapeHtml(program.id)}/u/${encodeURIComponent(row.login)}" title="${login}'s share card">Card</a>`;
-      return `<li><span class="rank">${i + 1}</span><img src="https://github.com/${encodeURIComponent(row.login)}.png?size=72" alt="" width="36" height="36" loading="lazy"><span class="who"><a href="https://github.com/${encodeURIComponent(row.login)}">${login}</a></span><span class="count">${row.count} merged ${row.count === 1 ? "PR" : "PRs"}</span>${chipHtml}${card}</li>`;
+      const prList = row.prs
+        .map(
+          (pr) =>
+            `<li><a href="${escapeHtml(pr.url)}"><span class="repo">${escapeHtml(pr.repo)}#${pr.number}</span>${escapeHtml(pr.title)}</a></li>`
+        )
+        .join("\n");
+      return `<li><details><summary><span class="rank">${i + 1}</span><img src="https://github.com/${encodeURIComponent(row.login)}.png?size=72" alt="" width="36" height="36" loading="lazy"><span class="who"><a href="https://github.com/${encodeURIComponent(row.login)}">${login}</a></span><span class="count">${row.count} merged ${row.count === 1 ? "PR" : "PRs"}</span>${chipHtml}${card}</summary>\n<ul class="prs">\n${prList}\n</ul></details></li>`;
     })
     .join("\n");
 

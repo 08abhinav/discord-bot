@@ -42,6 +42,9 @@ const search = (count: number) => () => ({
   total_count: count,
   items: Array.from({ length: count }, (_, i) => ({
     html_url: `https://github.com/codercops/toolbelt/pull/${i + 1}`,
+    number: 1, 
+    title: "Fix a thing", 
+    repository_url: "https://api.github.com/repos/codercops/toolbelt",
     user: { login: "Ada" },
     pull_request: { merged_at: `2026-10-0${i + 1}T00:00:00Z` },
   })),
@@ -399,6 +402,7 @@ describe("linked members in posts", () => {
       number: 9,
       title: "Fix a thing",
       html_url: "https://github.com/codercops/toolbelt/pull/9",
+      repository_url: "https://api.github.com/repos/codercops/toolbelt",
       merged: true,
       merged_at: "2026-10-05T12:00:00Z",
       user: { login: "Ada", type: "User" },
@@ -427,8 +431,8 @@ describe("linked members in posts", () => {
     // Five in the index, the new one among them (pull/5 here is #9's stand-in).
     const github = () => ({
       total_count: 5,
-      items: [1, 2, 3, 4].map((n) => ({ html_url: `https://github.com/codercops/toolbelt/pull/${n}`, user: { login: "Ada" }, pull_request: { merged_at: "2026-10-01T00:00:00Z" } })).concat([
-        { html_url: "https://github.com/codercops/toolbelt/pull/9", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-05T12:00:00Z" } },
+      items: [1, 2, 3, 4].map((n) => ({ html_url: `https://github.com/codercops/toolbelt/pull/${n}`, number: 1, title: "Fix a thing", repository_url: "https://api.github.com/repos/codercops/toolbelt", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-01T00:00:00Z" } })).concat([
+        { html_url: "https://github.com/codercops/toolbelt/pull/9", number: 1, title: "Fix a thing", repository_url: "https://api.github.com/repos/codercops/toolbelt", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-05T12:00:00Z" } },
       ]),
     });
     const fetched = mockFetch(github, discordApi({ memberRoles: ["role-contributor"] }));
@@ -458,7 +462,7 @@ describe("linked members in posts", () => {
 
   it("puts Discord names next to linked people on the leaderboard", () => {
     const program = getConfig(makeEnv()).programs[0]!;
-    const row = (login: string, count: number, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", qualifies: winner, winner });
+    const row = (login: string, count: number, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", prs:[], qualifies: winner, winner });
     const board = { generatedAt: now.toISOString(), rows: [row("Ada", 6, true), row("bob", 2)] };
     const embed = leaderboardMessage(board, program, { final: true, members: new Map([["ada", "42"]]) }).embeds?.[0];
     expect(embed?.description).toContain("1. **Ada** (<@42>) · 6 merged PRs · winner\n2. **bob** · 2 merged PRs");

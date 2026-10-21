@@ -240,7 +240,7 @@ describe("scheduled leaderboard", () => {
     env = makeEnv({ FINAL_RESULTS_NOTE: "Add it to your profile." });
     const fetched = mockFetch(() => ({
       total_count: 1,
-      items: [{ html_url: "https://github.com/codercops/toolbelt/pull/1", user: { login: "ada" }, pull_request: { merged_at: "2026-10-02T00:00:00Z" } }],
+      items: [{ html_url: "https://github.com/codercops/toolbelt/pull/1", number: 1, title: "Fix a thing", repository_url: "https://api.github.com/repos/codercops/toolbelt", user: { login: "ada" }, pull_request: { merged_at: "2026-10-02T00:00:00Z" } }],
     }));
     await run("2026-11-01T04:30:00Z");
     expect(fetched.discord()[0]?.body.embeds[0].description).toContain("Add it to your profile.");

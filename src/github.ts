@@ -90,7 +90,7 @@ export async function listStarterIssues(
 
 interface SearchResult {
   total_count: number;
-  items: { html_url: string; user: { login: string } | null; pull_request?: { merged_at: string | null } }[];
+  items: { html_url: string; number: number; title: string; repository_url: string; user: { login: string } | null; pull_request?: { merged_at: string | null } }[];
 }
 
 /** Every merged PR that counts for a program: labeled, in its repos, merged inside its window. */
@@ -112,7 +112,8 @@ export async function searchMergedPrs(env: Env, cfg: Config, program: Program): 
     const result = await gh<SearchResult>(env, `/search/issues?${query}`);
     for (const item of result.items) {
       const mergedAt = item.pull_request?.merged_at;
-      if (item.user && mergedAt) prs.push({ login: item.user.login, mergedAt, url: item.html_url });
+      const repo = item.repository_url.split("/").pop();
+      if (item.user && mergedAt && repo) prs.push({ login: item.user.login, mergedAt, url: item.html_url, title: item.title, repo, number: item.number });
     }
     if (result.items.length < 100) break;
   }

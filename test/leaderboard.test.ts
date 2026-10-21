@@ -3,6 +3,9 @@ import { rankContributors, type MergedPr } from "../src/leaderboard";
 
 const pr = (login: string, day: number, hour = 0): MergedPr => ({
   login,
+  title: `PR ${login}-${day}-${hour}`,
+  repo: "toolbelt",
+  number: day * 100 + hour,
   mergedAt: `2026-10-${String(day).padStart(2, "0")}T${String(hour).padStart(2, "0")}:00:00Z`,
   url: `https://github.com/codercops/toolbelt/pull/${login}-${day}-${hour}`,
 });

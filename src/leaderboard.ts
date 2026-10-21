@@ -5,7 +5,12 @@ export interface MergedPr {
   login: string;
   mergedAt: string;
   url: string;
+  title: string;
+  repo: string;
+  number: number;
 }
+
+export type CountedPr = Omit<MergedPr, "login">;
 
 export interface LeaderboardRow {
   login: string;
@@ -13,6 +18,8 @@ export interface LeaderboardRow {
   /** When they reached their current count: the merge time of their latest counted PR. */
   reachedAt: string;
   /** Has at least the minimum number of merged PRs. */
+  prs: CountedPr[];
+   /** Has at least the minimum number of merged PRs. */
   qualifies: boolean;
   /** Qualifies and is inside the top N. */
   winner: boolean;
@@ -30,18 +37,19 @@ export interface RankOptions {
  * `topN` winners.
  */
 export function rankContributors(prs: MergedPr[], opts: RankOptions): LeaderboardRow[] {
-  const byUser = new Map<string, { login: string; times: string[] }>();
-  for (const pr of prs) {
-    const key = pr.login.toLowerCase();
+  const byUser = new Map<string, { login: string; prs: CountedPr[] }>();
+  for (const { login, ...pr } of prs) {
+    const key = login.toLowerCase();
     if (opts.excludedUsers.has(key)) continue;
-    const entry = byUser.get(key) ?? { login: pr.login, times: [] };
-    entry.times.push(pr.mergedAt);
+    const entry = byUser.get(key) ?? { login, prs: [] };
+    entry.prs.push(pr);
     byUser.set(key, entry);
   }
 
-  const rows = [...byUser.values()].map(({ login, times }) => {
-    times.sort();
-    return { login, count: times.length, reachedAt: times[times.length - 1] ?? "" };
+  const rows = [...byUser.values()].map(({ login, prs }) => {
+    // Newest first
+    prs.sort((a, b) => b.mergedAt.localeCompare(a.mergedAt) || b.number - a.number);
+    return { login, count: prs.length, reachedAt: prs[0]?.mergedAt ?? "", prs };
   });
   rows.sort(
     (a, b) => b.count - a.count || a.reachedAt.localeCompare(b.reachedAt) || a.login.localeCompare(b.login)

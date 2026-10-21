@@ -17,7 +17,7 @@ vi.mock("../src/card-image", () => ({
 }));
 
 const program = getConfig(makeEnv()).programs[0]!;
-const row = (login: string, count: number, qualifies = false, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", qualifies, winner });
+const row = (login: string, count: number, qualifies = false, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", prs: [], qualifies, winner });
 const during = new Date("2026-10-12T04:30:00Z");
 
 describe("card layout helpers", () => {
@@ -161,9 +161,9 @@ describe("GET /leaderboard/{id}/u/{login}", () => {
   const search = () => ({
     total_count: 3,
     items: [
-      { html_url: "https://github.com/codercops/toolbelt/pull/1", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-02T00:00:00Z" } },
-      { html_url: "https://github.com/codercops/toolbelt/pull/2", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-03T00:00:00Z" } },
-      { html_url: "https://github.com/codercops/toolbelt/pull/3", user: { login: "noavatar" }, pull_request: { merged_at: "2026-10-03T00:00:00Z" } },
+      { html_url: "https://github.com/codercops/toolbelt/pull/1", number: 1, title: "Fix a thing", repository_url: "https://api.github.com/repos/codercops/toolbelt", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-02T00:00:00Z" } },
+      { html_url: "https://github.com/codercops/toolbelt/pull/2", number: 1, title: "Fix a thing", repository_url: "https://api.github.com/repos/codercops/toolbelt", user: { login: "Ada" }, pull_request: { merged_at: "2026-10-03T00:00:00Z" } },
+      { html_url: "https://github.com/codercops/toolbelt/pull/3", number: 1, title: "Fix a thing", repository_url: "https://api.github.com/repos/codercops/toolbelt", user: { login: "noavatar" }, pull_request: { merged_at: "2026-10-03T00:00:00Z" } },
     ],
   });
   beforeEach(() => {
