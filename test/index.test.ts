@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { version } from "../package.json";
 import { DAILY_CRON } from "../src/config";
 import worker from "../src/index";
 import { makeEnv, mockFetch, OCTOBER } from "./helpers";
@@ -58,6 +59,47 @@ describe("routing", () => {
     const home = await worker.fetch(new Request("https://bot.internal/"), makeEnv({ GIT_SHA: sha }), ctx);
     expect(await home.json()).toMatchObject({ commit: sha });
   });
+
+  it("serves the SVG favicon with the right content type and cache control", async () => {
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(new Request("https://bot.example/favicon.svg"), env, ctx);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/svg+xml");
+    expect(res.headers.get("Cache-Control")).toBe("public, max-age=86400");
+    const svg = await res.text();
+    expect(svg).toContain("<svg");
+    expect(svg).toContain("</svg>");});
+  it("names the running version from package.json", async () => {
+    const { ctx } = makeCtx();
+    const home = await worker.fetch(new Request("https://bot.internal/"), env, ctx);
+    expect(await home.json()).toMatchObject({ version });
+  });
+
+  it("answers a HEAD like the GET, with the same headers and no body", async () => {
+    const { ctx } = makeCtx();
+    const get = await worker.fetch(new Request("https://bot.internal/"), env, ctx);
+    const head = await worker.fetch(new Request("https://bot.internal/", { method: "HEAD" }), env, ctx);
+    expect(head.status).toBe(get.status);
+    expect(head.headers.get("Content-Type")).toBe(get.headers.get("Content-Type"));
+    expect(await head.text()).toBe("");
+  });
+
+  it("still 404s a HEAD for a path that isn't there", async () => {
+    const { ctx } = makeCtx();
+    const res = await worker.fetch(new Request("https://bot.example/nope", { method: "HEAD" }), env, ctx);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("");
+  });
+
+  it("leaves the link callback on GET, so a HEAD never spends the code", async () => {
+    // Linking is on, so a GET here would talk to Discord.
+    const fetched = mockFetch();
+    const { ctx } = makeCtx();
+    const linking = makeEnv({ LINKING: "on", DISCORD_CLIENT_SECRET: "secret" });
+    const res = await worker.fetch(new Request("https://bot.example/link/callback?code=abc&state=xyz", { method: "HEAD" }), linking, ctx);
+    expect(res.status).toBe(404);
+    expect(fetched.calls).toHaveLength(0);
+  });
 });
 
 describe("public address", () => {
@@ -84,6 +126,26 @@ describe("public address", () => {
     // A local preview isn't redirected.
     const local = await worker.fetch(new Request("http://localhost:8787/leaderboard"), env, ctx);
     expect(local.status).toBe(200);
+  });
+
+  it("redirects trailing slashes to the path without them, keeping query strings", async () => {
+    const { ctx } = makeCtx();
+    for (const path of ["/leaderboard/", "/leaderboard/2026-10/", "/leaderboard/2026-10/u/ada/"]) {
+      const res = await worker.fetch(new Request(`https://bot.example${path}`), env, ctx);
+      expect(res.status).toBe(301);
+      expect(res.headers.get("Location")).toBe(`https://bot.example${path.replace(/\/+$/, "")}`);
+    }
+
+    const withQuery = await worker.fetch(new Request("https://bot.example/leaderboard/2026-10/?x=1"), env, ctx);
+    expect(withQuery.status).toBe(301);
+    expect(withQuery.headers.get("Location")).toBe("https://bot.example/leaderboard/2026-10?x=1");
+
+    const head = await worker.fetch(new Request("https://bot.example/leaderboard/", { method: "HEAD" }), env, ctx);
+    expect(head.status).toBe(301);
+    expect(head.headers.get("Location")).toBe("https://bot.example/leaderboard");
+
+    const post = await worker.fetch(new Request("https://bot.example/leaderboard/", { method: "POST" }), env, ctx);
+    expect(post.status).toBe(404);
   });
 });
 
@@ -200,6 +262,7 @@ describe("POST /github", () => {
 describe("scheduled leaderboard", () => {
   const run = (when: string, cron = DAILY_CRON) =>
     worker.scheduled({ cron, scheduledTime: Date.parse(when), noRetry() {} } as ScheduledController, env);
+  afterEach(() => vi.restoreAllMocks());
 
   it("posts on Mondays while a program runs and stays quiet otherwise", async () => {
     const fetched = mockFetch();
@@ -257,6 +320,33 @@ describe("scheduled leaderboard", () => {
       "Hacktoberfest 2026 leaderboard: final results",
       "November sprint leaderboard",
     ]);
+  });
+
+  it("still posts the other programs when one of them fails, and logs which one", async () => {
+    const november = { ...OCTOBER, id: "2026-11", title: "November sprint", start: "2026-11-01T00:00:00Z", end: "2026-11-30T23:59:59Z" };
+    env = makeEnv({ PROGRAMS: [OCTOBER, november] });
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetched = mockFetch((url) => {
+      if (url.searchParams.get("q")?.includes("2026-10-01")) throw new Error("GitHub is down");
+      return { total_count: 0, items: [] };
+    });
+    // Doesn't throw, so the run isn't retried with the November board already out.
+    await expect(run("2026-11-02T04:30:00Z")).resolves.toBeUndefined();
+    expect(fetched.discord().map((c) => c.body.embeds[0].title)).toEqual(["November sprint leaderboard"]);
+    expect(error).toHaveBeenCalledWith("daily post failed", "final results 2026-10", expect.any(Error));
+  });
+
+  it("tries final results that failed to post again on the next run", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    let failing = true;
+    const fetched = mockFetch(undefined, () => (failing ? new Response("", { status: 500 }) : undefined));
+    await run("2026-11-01T04:30:00Z");
+    expect(env.STATE.store.has("final:2026-10")).toBe(false);
+
+    failing = false;
+    fetched.clear();
+    await run("2026-11-02T04:30:00Z");
+    expect(fetched.discord().map((c) => c.body.embeds[0].title)).toEqual(["Hacktoberfest 2026 leaderboard: final results"]);
   });
 
   it("ignores crons it doesn't know", async () => {

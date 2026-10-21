@@ -195,7 +195,10 @@ describe("GET /link/callback", () => {
   it("handles a cancelled request, a rejected code and linking being off", async () => {
     const fetched = mockFetch(search(0), discordApi({ tokenStatus: 400 }));
     const cancelled = await callback({ error: "access_denied", state: await validState() });
-    expect(await cancelled.text()).toContain("Nothing was linked");
+    expect(cancelled.headers.get("Content-Security-Policy")).toContain("img-src 'self'");
+    const cancelledHtml = await cancelled.text();
+    expect(cancelledHtml).toContain("Nothing was linked");
+    expect(cancelledHtml).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
     expect(fetched.calls).toHaveLength(0);
 
     const rejected = await callback({ code: "used-twice", state: await validState() });

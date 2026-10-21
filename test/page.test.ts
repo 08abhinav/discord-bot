@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { getConfig } from "../src/config";
 import worker from "../src/index";
 import { rankContributors, type MergedPr } from "../src/leaderboard";
-import { dateRange, escapeHtml, leaderboardJson, leaderboardPage, standing, statusLine } from "../src/page";
+import { contributorPage, dateRange, escapeHtml, leaderboardJson, leaderboardPage, noticePage, standing, statusLine } from "../src/page";
 import { currentProgram } from "../src/programs";
 import { makeEnv, mockFetch, OCTOBER } from "./helpers";
 
@@ -22,6 +22,7 @@ const links = {
   issues: "https://github.com/search?q=x&type=issues",
   discord: "https://discord.gg/example",
   self: "https://bot.example/leaderboard/2026-10",
+  image: "https://bot.example/leaderboard/2026-10.png?v=abc",
   others: [] as { title: string; path: string }[],
 };
 
@@ -134,6 +135,51 @@ describe("leaderboardPage", () => {
     expect(html).toContain('<link rel="canonical" href="https://bot.example/leaderboard/2026-10">');
     const many = leaderboardPage(board, program, { ...links, others: [{ title: "November sprint", path: "/leaderboard/2026-11" }] }, during);
     expect(many).toContain('<li><a href="/leaderboard/2026-11">November sprint</a></li>');
+  });
+
+  it("links to the favicon in the head", () => {
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+  });
+
+  it("has the same share preview tags as a contributor page, pointing at its own image", () => {
+    expect(html).toContain('<meta property="og:image" content="https://bot.example/leaderboard/2026-10.png?v=abc">');
+    expect(html).toContain('<meta property="og:image:width" content="1200">');
+    expect(html).toContain('<meta property="og:image:height" content="630">');
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">');
+    expect(html).toContain('<meta name="twitter:image" content="https://bot.example/leaderboard/2026-10.png?v=abc">');
+    expect(html).not.toContain("og.codercops.com");
+    expect(html).toContain(
+      '<meta property="og:image:alt" content="Share image: Hacktoberfest 2026 leaderboard. 1. ada, 6 merged PRs; 2. bob, 5 merged PRs; 3. cy, 2 merged PRs; 4. dee, 4 merged PRs.">'
+    );
+    const empty = leaderboardPage({ ...board, rows: [] }, program, links, during);
+    expect(empty).toContain('content="Share image: Hacktoberfest 2026 leaderboard. No merged pull requests counted yet.">');
+    const evil = leaderboardPage({ ...board, rows: [row('"><script>', 1)] }, program, links, during);
+    expect(evil).toContain("1. &quot;&gt;&lt;script&gt;, 1 merged PR.");
+  });
+});
+
+describe("noticePage", () => {
+  it("links to the favicon in the head", () => {
+    const html = noticePage("Done", ["Everything is linked."], true);
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
+  });
+});
+
+describe("contributorPage", () => {
+  it("links to the favicon in the head", () => {
+    const html = contributorPage(
+      { program, row: board.rows[0]!, rank: 1, of: 4, generatedAt: "2026-10-12T04:30:00.000Z" },
+      {
+        self: "https://bot.example/leaderboard/2026-10/u/ada",
+        image: "https://bot.example/leaderboard/2026-10/u/ada.png",
+        board: "/leaderboard/2026-10",
+        prs: "https://github.com/search?q=x",
+        issues: "https://github.com/search?q=x",
+        discord: "https://discord.gg/example",
+      },
+      during
+    );
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
   });
 });
 
@@ -252,12 +298,14 @@ describe("GET /leaderboard", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("Content-Type")).toContain("text/html");
     expect(res.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
+    expect(res.headers.get("Content-Security-Policy")).toContain("img-src 'self'");
     const html = await res.text();
     expect(html).toContain(">ada<");
     expect(html).toContain("toolbelt#1");
     expect(html).toContain("Add belt loops");
     expect(html).not.toContain("anurag629");
     expect(html).toContain('content="https://bot.example/leaderboard/2026-10"');
+    expect(html).toContain('<link rel="icon" type="image/svg+xml" href="/favicon.svg">');
 
     await worker.fetch(new Request("https://bot.example/leaderboard"), env, ctx);
     expect(fetched.calls.filter((c) => c.url.includes("api.github.com"))).toHaveLength(1);
@@ -281,7 +329,6 @@ describe("GET /leaderboard", () => {
     expect(((await json.json()) as { id: string }).id).toBe("2026-10");
 
     expect((await worker.fetch(new Request("https://bot.example/leaderboard/2025-10"), env, ctx)).status).toBe(404);
-    expect((await worker.fetch(new Request("https://bot.example/leaderboard/"), env, ctx)).status).toBe(404);
     expect((await worker.fetch(new Request("https://bot.example/leaderboard", { method: "POST" }), env, ctx)).status).toBe(404);
     const none = await worker.fetch(new Request("https://bot.example/leaderboard"), makeEnv({ PROGRAMS: [] }), ctx);
     expect(none.status).toBe(404);
@@ -298,6 +345,16 @@ describe("GET /leaderboard", () => {
     const searches = fetched.calls.filter((c) => c.url.includes("api.github.com"));
     expect(searches).toHaveLength(2);
     expect(decodeURIComponent(searches[1]!.url)).toContain("merged:2026-11-01T00:00:00Z..2026-11-30T23:59:59Z");
+  });
+
+  it("answers a HEAD like the GET, with the same headers and no body", async () => {
+    mockFetch(search);
+    const get = await worker.fetch(new Request("https://bot.example/leaderboard"), env, ctx);
+    const head = await worker.fetch(new Request("https://bot.example/leaderboard", { method: "HEAD" }), env, ctx);
+    expect(head.status).toBe(get.status);
+    expect(head.headers.get("Content-Type")).toBe(get.headers.get("Content-Type"));
+    expect(head.headers.get("Content-Security-Policy")).toBe(get.headers.get("Content-Security-Policy"));
+    expect(await head.text()).toBe("");
   });
 
   it("answers 503 when GitHub is rate limiting", async () => {

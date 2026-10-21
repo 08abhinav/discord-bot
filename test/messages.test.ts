@@ -9,6 +9,7 @@ import {
   starterIssueMessage,
   starterIssuesReply,
   truncate,
+  truncateReleaseNotes,
 } from "../src/messages";
 import { makeEnv, OCTOBER } from "./helpers";
 
@@ -49,7 +50,39 @@ describe("releaseMessage", () => {
     const msg = releaseMessage("ogcops", { ...release, name: null, body: null });
     expect(msg.embeds?.[0]).toMatchObject({ title: "ogcops v0.6.2", description: "No release notes." });
     const long = releaseMessage("ogcops", { ...release, body: "x".repeat(6000) });
-    expect(long.embeds?.[0]?.description?.length).toBeLessThanOrEqual(3500);
+    expect(long.embeds?.[0]?.description?.length).toBeLessThanOrEqual(4096);
+  });
+});
+
+describe("truncateReleaseNotes", () => {
+  const url = "https://github.com/codercops/toolbelt/releases/tag/v1.0.0";
+
+  it("returns short notes completely unchanged", () => {
+    const notes = "Fixes a bug.\nSee the changelog.";
+    expect(truncateReleaseNotes(notes, url)).toBe(notes);
+  });
+
+  it("cuts long notes at the last line break and appends a link to the release", () => {
+    const line = "a".repeat(100);
+    const notes = Array.from({ length: 35 }, () => line).join("\n");
+    const result = truncateReleaseNotes(notes, url);
+    const [body] = result.split("\n[Read the full notes]");
+    expect(body?.trim().endsWith(line)).toBe(true);
+    expect(result).toContain(`[Read the full notes](${url})`);
+    expect(result.length).toBeLessThanOrEqual(4096);
+  });
+
+  it("closes an open code fence before the link", () => {
+    const notes = "```ts\n" + "const x = 1;\n".repeat(300) + "trailing\n".repeat(10);
+    const result = truncateReleaseNotes(notes, url);
+    expect(result).toMatch(/^```$/m);
+    expect(result).toContain(`[Read the full notes](${url})`);
+    expect(result.length).toBeLessThanOrEqual(4096);
+  });
+
+  it("stays within Discord's 4096-character embed description limit", () => {
+    const result = truncateReleaseNotes("word\n".repeat(1000), url);
+    expect(result.length).toBeLessThanOrEqual(4096);
   });
 });
 
@@ -179,7 +212,9 @@ describe("starterIssuesReply", () => {
     expect(reply.embeds).toHaveLength(2);
     expect(reply.embeds?.[0]?.title).toBe("toolbelt: 2 open starter issues");
     expect(reply.embeds?.[0]?.description).toContain("[#2](https://github.com/codercops/toolbelt/issues/2) Issue 2");
-    expect(decodeURIComponent(reply.embeds?.[0]?.url ?? "")).toContain('no:assignee label:"good first issue","help wanted"');
+    expect(decodeURIComponent(reply.embeds?.[0]?.url ?? "")).toContain("-label:blocked");
+    expect(decodeURIComponent(reply.embeds?.[0]?.url ?? "")).toContain("no:assignee");
+    expect(decodeURIComponent(reply.embeds?.[0]?.url ?? "")).toContain('label:"good first issue","help wanted"');
     expect(reply.embeds?.[1]?.description).toContain("Nothing unassigned right now");
   });
 
@@ -188,7 +223,9 @@ describe("starterIssuesReply", () => {
     const embed = starterIssuesReply(cfg, [{ repo: "toolbelt", issues }], ["help wanted"]).embeds?.[0];
     const links = [embed?.url, embed?.description?.match(/\[and \d+ more\]\(([^)]+)\)/)?.[1]].map((u) => decodeURIComponent(u ?? ""));
     for (const link of links) {
-      expect(link).toContain('no:assignee label:"help wanted"');
+      expect(link).toContain("-label:blocked");
+      expect(link).toContain("no:assignee");
+      expect(link).toContain('label:"help wanted"');
       expect(link).not.toContain("good first issue");
     }
   });
