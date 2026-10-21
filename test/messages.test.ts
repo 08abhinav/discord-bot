@@ -100,7 +100,7 @@ describe("mergedPrMessage", () => {
 });
 
 describe("leaderboardMessage", () => {
-  const row = (login: string, count: number, qualifies = false, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", qualifies, winner });
+  const row = (login: string, count: number, qualifies = false, winner = false) => ({ login, count, reachedAt: "2026-10-05T00:00:00Z", prs:[], qualifies, winner });
   const board = { generatedAt: "2026-10-12T04:30:00.000Z", rows: [row("ada", 6, true, true), row("bob", 2), row("cy", 1)] };
 
   const program = cfg.programs[0]!;

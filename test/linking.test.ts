@@ -348,7 +348,7 @@ describe("/link, /unlink and /me", () => {
 
     await saveLink(env, ada);
     mockFetch(search(6), discordApi({ memberRoles: ["role-contributor", "role-top"] }));
-    await env.STATE.delete("leaderboard:v2:2026-10");
+    await env.STATE.delete("leaderboard:v3:2026-10");
     expect((await run("me")).content).toContain("6 merged PRs, 1st of 1. You're in the top 5 right now.");
 
     const later = await runCommand({ name: "me" }, user, env, cfg, new Date("2026-11-05T00:00:00Z"));

@@ -10,6 +10,7 @@ export interface MergedPr {
   number: number;
 }
 
+/** A counted PR as shown under a leaderboard row. */
 export type CountedPr = Omit<MergedPr, "login">;
 
 export interface LeaderboardRow {
@@ -17,9 +18,9 @@ export interface LeaderboardRow {
   count: number;
   /** When they reached their current count: the merge time of their latest counted PR. */
   reachedAt: string;
-  /** Has at least the minimum number of merged PRs. */
+  /** Their counted PRs, newest first. */
   prs: CountedPr[];
-   /** Has at least the minimum number of merged PRs. */
+  /** Has at least the minimum number of merged PRs. */
   qualifies: boolean;
   /** Qualifies and is inside the top N. */
   winner: boolean;
@@ -64,7 +65,7 @@ export function rankContributors(prs: MergedPr[], opts: RankOptions): Leaderboar
   });
 }
 
-const cacheKey = (program: Program) => `leaderboard:v2:${program.id}`;
+const cacheKey = (program: Program) => `leaderboard:v3:${program.id}`;
 const CACHE_TTL_SECONDS = 600;
 
 export interface Leaderboard {
