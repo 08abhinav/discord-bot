@@ -2,6 +2,7 @@
 // JSON from the same ranking the Discord posts use.
 import type { Program } from "./config";
 import type { Leaderboard, LeaderboardRow } from "./leaderboard";
+import { BOARD_ROWS } from "./card";
 import { programStatus, type ProgramStatus } from "./programs";
 
 export function escapeHtml(text: string): string {
@@ -56,6 +57,19 @@ export function leaderboardJson(board: Leaderboard, program: Program, now: Date)
     })),
   };
 }
+
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <circle cx="16" cy="3" r="2" fill="#00e5c7" stroke="#0a0b0f" stroke-width="1.2"/>
+  <line x1="16" y1="5" x2="16" y2="8" stroke="#0a0b0f" stroke-width="1.2"/>
+  <rect x="1.5" y="14" width="3.5" height="7" rx="1.75" fill="#00e5c7" stroke="#0a0b0f" stroke-width="1.2"/>
+  <rect x="27" y="14" width="3.5" height="7" rx="1.75" fill="#00e5c7" stroke="#0a0b0f" stroke-width="1.2"/>
+  <rect x="5" y="8" width="22" height="20" rx="8" fill="#ffffff" stroke="#0a0b0f" stroke-width="1.5"/>
+  <rect x="8" y="12.5" width="16" height="8" rx="4" fill="#0a0b0f"/>
+  <ellipse cx="12.5" cy="16.5" rx="1.6" ry="2" fill="#00e5c7"/>
+  <ellipse cx="19.5" cy="16.5" rx="1.6" ry="2" fill="#00e5c7"/>
+  <path d="M12.5 23.5 Q16 26 19.5 23.5" fill="none" stroke="#0a0b0f" stroke-width="1.4" stroke-linecap="round"/>
+</svg>
+`;
 
 const STYLE = `
 :root{--bg:#0a0b0f;--raise:#12141a;--line:#1e222b;--fg:#e6e9ef;--muted:#8a93a8;--cyan:#00e5c7;--violet:#9e7bff;--gold:#d4a72c}
@@ -127,6 +141,8 @@ export interface PageLinks {
   discord: string;
   /** The page's own permanent URL, for share previews. */
   self: string;
+  /** The board's share image, as an absolute URL. It carries a version so previews refresh when the top five change. */
+  image: string;
   /** The other programs, each with the path of its page. */
   others: { title: string; path: string }[];
 }
@@ -145,11 +161,13 @@ export function leaderboardPage(
   const when = dateRange(start, end);
   const state = statusLine(program, now);
   const description = `Merged pull requests in ${repos}, ${when}. The top ${topN} with at least ${minPrs} get ${reward}.`;
-  const ogImage = `https://og.codercops.com/api/og?${new URLSearchParams({
-    template: "github-readme-hero",
-    title: heading,
-    description: `Top contributors to ${repos}`,
-  })}`;
+  const top = board.rows
+    .slice(0, BOARD_ROWS)
+    .map((row, i) => `${i + 1}. ${row.login}, ${row.count} merged ${row.count === 1 ? "PR" : "PRs"}`)
+    .join("; ");
+  const imageAlt = board.rows.length
+    ? `Share image: ${heading}. ${top}.`
+    : `Share image: ${heading}. No merged pull requests counted yet.`;
 
   const rows = board.rows
     .map((row, i) => {
@@ -176,10 +194,15 @@ export function leaderboardPage(
 <meta name="description" content="${escapeHtml(description)}">
 <meta property="og:title" content="${escapeHtml(heading)}">
 <meta property="og:description" content="${escapeHtml(description)}">
-<meta property="og:image" content="${escapeHtml(ogImage)}">
+<meta property="og:image" content="${escapeHtml(links.image)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${escapeHtml(imageAlt)}">
 <meta property="og:url" content="${escapeHtml(links.self)}">
 <link rel="canonical" href="${escapeHtml(links.self)}">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${escapeHtml(links.image)}">
 <style>${STYLE}</style>
 </head>
 <body>
@@ -217,6 +240,7 @@ export function noticePage(title: string, lines: string[], ok: boolean, label = 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${escapeHtml(title)}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>${STYLE}</style>
 </head>
 <body>
@@ -289,6 +313,7 @@ export function contributorPage(
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${escapeHtml(links.image)}">
 <link rel="canonical" href="${escapeHtml(links.self)}">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>${STYLE}</style>
 </head>
 <body>

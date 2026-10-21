@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getConfig } from "../src/config";
-import { handleGithubEvent, isStarterIssue, starterState } from "../src/webhook";
+import { handleGithubEvent, isStarterIssue, resyncStarterIssues, starterState } from "../src/webhook";
 import { makeEnv, mockFetch } from "./helpers";
 
 const repository = { name: "toolbelt", owner: { login: "codercops" } };
@@ -79,6 +79,48 @@ describe("starter issue feed", () => {
     expect(fetched.discord().filter((c) => c.method === "POST")).toHaveLength(1);
   });
 
+  it("skips Discord edits and KV writes when only the issue body changes", async () => {
+    const fetched = mockFetch();
+    expect(await handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg)).toBe("posted starter issue");
+    const put = vi.spyOn(env.STATE, "put");
+    const bodyEdited = issueEvent("edited", { body: "A changed body that isn't shown in the feed." });
+
+    expect(await handleGithubEvent("issues", bodyEdited, env, cfg)).toBe("unchanged starter issue");
+    expect(fetched.discord()).toHaveLength(1);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("edits the feed when the title, labels, or assignee changes", async () => {
+    const fetched = mockFetch();
+    expect(await handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg)).toBe("posted starter issue");
+
+    expect(await handleGithubEvent("issues", issueEvent("edited", { title: "Updated title" }), env, cfg)).toBe("updated starter issue (open)");
+    expect(await handleGithubEvent("issues", issueEvent("labeled", { labels: [{ name: "bug" }, { name: "good first issue" }, { name: "help wanted" }] }, "help wanted"), env, cfg)).toBe("updated starter issue (open)");
+    expect(await handleGithubEvent("issues", issueEvent("assigned", { assignees: [{ login: "ada" }] }), env, cfg)).toBe("updated starter issue (claimed)");
+
+    expect(fetched.discord()).toHaveLength(4);
+    expect(fetched.discord()[1]?.body.embeds[0].title).toContain("Updated title");
+    expect(fetched.discord()[2]?.body.embeds[0].description).toContain("help wanted");
+    expect(fetched.discord()[3]?.body.embeds[0].description).toContain("Claimed by ada.");
+  });
+
+  it("updates legacy records without a snapshot once, then skips unchanged events", async () => {
+    const fetched = mockFetch();
+    const key = "issue:toolbelt#124";
+    await env.STATE.put(key, JSON.stringify({ messageId: "legacy-message", state: "open" }));
+    const put = vi.spyOn(env.STATE, "put");
+    const edited = issueEvent("edited", { body: "Only the body changed." });
+
+    expect(await handleGithubEvent("issues", edited, env, cfg)).toBe("updated starter issue (open)");
+    expect(fetched.discord()).toHaveLength(1);
+    expect(fetched.discord()[0]?.url).toContain("/messages/legacy-message");
+    expect(put).toHaveBeenCalledTimes(1);
+
+    expect(await handleGithubEvent("issues", edited, env, cfg)).toBe("unchanged starter issue");
+    expect(fetched.discord()).toHaveLength(1);
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
   it("says no longer available for an issue closed as not planned, and brings it back on reopen", async () => {
     const fetched = mockFetch();
     expect(await handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg)).toBe("posted starter issue");
@@ -120,7 +162,7 @@ describe("starter issue feed", () => {
     expect(await handleGithubEvent("issues", unblocked, env, cfg)).toBe("posted starter issue");
     expect(fetched.discord()).toHaveLength(1);
     expect(fetched.discord()[0]?.body.embeds[0].description).toContain("Comment on the issue to claim it");
-    expect(await handleGithubEvent("issues", unblocked, env, cfg)).toBe("updated starter issue (open)");
+    expect(await handleGithubEvent("issues", unblocked, env, cfg)).toBe("unchanged starter issue");
     expect(fetched.discord().filter((c) => c.method === "POST")).toHaveLength(1);
   });
 
@@ -306,6 +348,11 @@ describe("merged pull requests", () => {
     const post = fetched.discord()[0];
     expect(post?.url).toBe("https://discord.com/api/v10/channels/chan-merged/messages");
     expect(post?.body.embeds[0].description).toContain("That's their 3rd merged PR on the Hacktoberfest 2026 leaderboard.");
+    expect(fetched.calls.filter((c) => c.url.startsWith("https://api.github.com/"))).toHaveLength(1);
+    const cached = JSON.parse(env.STATE.store.get("leaderboard:v2:2026-10") ?? "{}");
+    expect(cached.rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ login: "ada", count: 3 }), expect.objectContaining({ login: "bob", count: 1 })])
+    );
   });
 
   it("doesn't double count when search already includes this PR", async () => {
@@ -315,6 +362,17 @@ describe("merged pull requests", () => {
     }));
     await handleGithubEvent("pull_request", prEvent(), env, cfg);
     expect(fetched.discord()[0]?.body.embeds[0].description).toContain("That's their 1st merged PR");
+    const cached = JSON.parse(env.STATE.store.get("leaderboard:v2:2026-10") ?? "{}");
+    expect(cached.rows).toEqual([expect.objectContaining({ login: "ada", count: 1 })]);
+  });
+
+  it("clears the cached leaderboard and still posts a shoutout when search fails", async () => {
+    await env.STATE.put("leaderboard:v2:2026-10", JSON.stringify({ rows: [], generatedAt: "earlier" }));
+    const fetched = mockFetch(() => new Response("unavailable", { status: 503 }));
+    await handleGithubEvent("pull_request", prEvent(), env, cfg);
+    expect(env.STATE.store.has("leaderboard:v2:2026-10")).toBe(false);
+    expect(fetched.discord()).toHaveLength(1);
+    expect(fetched.discord()[0]?.body.embeds[0].description).not.toContain("That's their");
   });
 
   it("says they qualify on the merge that reaches the minimum, and only on that one", async () => {
@@ -367,6 +425,98 @@ describe("merged pull requests", () => {
     await handleGithubEvent("pull_request", prEvent({ merged: false }), env, cfg);
     await handleGithubEvent("pull_request", { ...prEvent(), action: "opened" }, env, cfg);
     expect(fetched.discord()).toHaveLength(0);
+  });
+});
+
+describe("rate limited starter issue feed", () => {
+  const rateLimit = () => new Response(JSON.stringify({ retry_after: 30 }), { status: 429 });
+  const onGithub = (over: Record<string, unknown> = {}) => () => ({ ...issueEvent("edited").issue, ...over });
+
+  it("marks the issue instead of failing when Discord answers 429, and the cron posts it", async () => {
+    mockFetch(undefined, rateLimit);
+    expect(await handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg)).toBe(
+      "starter issue rate limited, resync queued"
+    );
+    expect(await env.STATE.get("resync:toolbelt#124")).toBe("1");
+    expect(await env.STATE.get("issue:toolbelt#124")).toBeNull();
+
+    const fetched = mockFetch(onGithub());
+    await resyncStarterIssues(env, cfg);
+    expect(fetched.calls[0]?.url).toBe("https://api.github.com/repos/codercops/toolbelt/issues/124");
+    expect(fetched.discord()).toHaveLength(1);
+    expect(fetched.discord()[0]?.method).toBe("POST");
+    expect(await env.STATE.get("resync:toolbelt#124")).toBeNull();
+    expect(await env.STATE.get("issue:toolbelt#124", "json")).toMatchObject({ messageId: "msg-1", state: "open" });
+  });
+
+  it("edits the message to the issue's state on GitHub, not the state of the lost event", async () => {
+    mockFetch();
+    await handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg);
+    mockFetch(undefined, rateLimit);
+    expect(await handleGithubEvent("issues", issueEvent("assigned", { assignees: [{ login: "ada" }] }), env, cfg)).toBe(
+      "starter issue rate limited, resync queued"
+    );
+
+    // By the next run the issue was closed on GitHub.
+    const fetched = mockFetch(onGithub({ state: "closed", state_reason: "completed", assignees: [{ login: "ada" }] }));
+    await resyncStarterIssues(env, cfg);
+    expect(fetched.discord()).toHaveLength(1);
+    expect(fetched.discord()[0]?.method).toBe("PATCH");
+    expect(fetched.discord()[0]?.url).toContain("/messages/msg-1");
+    expect(await env.STATE.get("issue:toolbelt#124", "json")).toMatchObject({ messageId: "msg-1", state: "done" });
+    expect(await env.STATE.get("resync:toolbelt#124")).toBeNull();
+  });
+
+  it("doesn't undo a newer update that already went through", async () => {
+    mockFetch();
+    await handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg);
+    mockFetch(undefined, rateLimit);
+    await handleGithubEvent("issues", issueEvent("assigned", { assignees: [{ login: "ada" }] }), env, cfg);
+    mockFetch();
+    expect(await handleGithubEvent("issues", issueEvent("unassigned"), env, cfg)).toBe("unchanged starter issue");
+    const claimed = mockFetch();
+    await handleGithubEvent("issues", issueEvent("assigned", { assignees: [{ login: "bob" }] }), env, cfg);
+    expect(claimed.discord()).toHaveLength(1);
+
+    const fetched = mockFetch(onGithub({ assignees: [{ login: "bob" }] }));
+    await resyncStarterIssues(env, cfg);
+    expect(fetched.discord()).toHaveLength(0);
+    expect(await env.STATE.get("issue:toolbelt#124", "json")).toMatchObject({ state: "claimed" });
+    expect(await env.STATE.get("resync:toolbelt#124")).toBeNull();
+  });
+
+  it("keeps the mark when the resync is rate limited too", async () => {
+    await env.STATE.put("resync:toolbelt#124", "1");
+    await env.STATE.put("resync:toolbelt#125", "1");
+    const fetched = mockFetch(onGithub(), rateLimit);
+    await resyncStarterIssues(env, cfg);
+    // The channel is still limited, so the second issue isn't tried this run.
+    expect(fetched.discord()).toHaveLength(1);
+    expect(await env.STATE.get("resync:toolbelt#124")).toBe("1");
+    expect(await env.STATE.get("resync:toolbelt#125")).toBe("1");
+  });
+
+  it("does a few per run, and costs one list when nothing is marked", async () => {
+    for (let n = 1; n <= 7; n++) await env.STATE.put(`resync:toolbelt#${n}`, "1");
+    const fetched = mockFetch((url) => ({ ...issueEvent("edited").issue, number: Number(url.pathname.split("/").pop()) }));
+    await resyncStarterIssues(env, cfg);
+    expect(fetched.discord()).toHaveLength(5);
+    expect((await env.STATE.list({ prefix: "resync:" })).keys).toHaveLength(2);
+
+    await resyncStarterIssues(env, cfg);
+    fetched.clear();
+    const get = vi.spyOn(env.STATE, "get");
+    const list = vi.spyOn(env.STATE, "list");
+    await resyncStarterIssues(env, cfg);
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(get).not.toHaveBeenCalled();
+    expect(fetched.calls).toHaveLength(0);
+  });
+
+  it("lets other Discord errors fail the webhook as before", async () => {
+    mockFetch(undefined, () => new Response("{}", { status: 500 }));
+    await expect(handleGithubEvent("issues", issueEvent("labeled", {}, "good first issue"), env, cfg)).rejects.toThrow("Discord 500");
+    expect(await env.STATE.get("resync:toolbelt#124")).toBeNull();
   });
 });
 

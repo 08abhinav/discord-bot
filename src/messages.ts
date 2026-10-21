@@ -14,6 +14,21 @@ export function truncate(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+export function truncateReleaseNotes(notes: string, releaseUrl: string, limit = 3500): string {
+  if (notes.length <= limit) return notes;
+
+  const suffix = `\n[Read the full notes](${releaseUrl})`;
+  const budget = Math.min(limit, 4096 - suffix.length);
+
+  const cut = notes.lastIndexOf("\n", budget);
+  const trimmed = (cut > 0 ? notes.slice(0, cut) : notes.slice(0, budget)).trimEnd();
+
+  const fenceCount = (trimmed.match(/^```/gm) ?? []).length;
+  const closeIfNeeded = fenceCount % 2 !== 0 ? "\n```" : "";
+
+  return `${trimmed}${closeIfNeeded}${suffix}`;
+}
+
 // Markdown characters in a title would otherwise change how the line renders.
 export function escapeMarkdown(text: string): string {
   return text.replace(/([\\*_~`|>\[\]()])/g, "\\$1");
@@ -33,7 +48,7 @@ export function releaseMessage(repo: string, release: { name: string | null; tag
       {
         title: truncate(title, 256),
         url: release.html_url,
-        description: truncate(release.body?.trim() || "No release notes.", 3500),
+        description: truncateReleaseNotes(release.body?.trim() || "No release notes.", release.html_url),
         color: COLOR.release,
       },
     ],
@@ -175,7 +190,7 @@ export function starterIssuesReply(
   const embeds: Embed[] = issuesByRepo.map(({ repo, issues }) => {
     // A comma between quoted labels means "any of these" in GitHub search.
     const labelFilter = labels.map((l) => `"${l}"`).join(",");
-    const listUrl = `https://github.com/${cfg.org}/${repo}/issues?q=${encodeURIComponent(`is:issue is:open no:assignee label:${labelFilter}`)}`;
+    const listUrl = `https://github.com/${cfg.org}/${repo}/issues?q=${encodeURIComponent(`is:issue is:open no:assignee -label:blocked label:${labelFilter}`)}`;
     const lines = issues
       .slice(0, perRepo)
       .map((i) => `[#${i.number}](${i.url}) ${escapeMarkdown(truncate(i.title, 90))}`);
@@ -249,10 +264,13 @@ export function checkinReply(result: CheckinResult, roadmap: Roadmap, threadId?:
 export function streaksMessage(
   cfg: Config,
   ranked: (CheckinRecord & { live: number })[],
-  opts: { limit?: number } = {}
+  opts: { limit?: number; roadmap?: string } = {}
 ): MessagePayload {
+  const wanted = opts.roadmap
+    ? cfg.roadmaps.filter((r) => r.name === opts.roadmap)
+    : cfg.roadmaps;
   const embeds: Embed[] = [];
-  for (const roadmap of cfg.roadmaps) {
+  for (const roadmap of wanted) {
     const rows = ranked.filter((r) => r.roadmap === roadmap.id);
     if (rows.length === 0) continue;
     const lines = rows.slice(0, opts.limit ?? 10).map((r, i) => {
@@ -263,6 +281,9 @@ export function streaksMessage(
     embeds.push({ title: roadmap.name, url: roadmap.url, description: lines.join("\n"), color: COLOR.gold });
   }
   if (embeds.length === 0) {
+    if (opts.roadmap) {
+      return { content: `Nobody has checked in on **${opts.roadmap}** yet. Run \`/checkin\` to start your streak.` };
+    }
     return { content: "Nobody has checked in yet. Run `/checkin` to start your streak." };
   }
   return { content: "Learning streaks. Check in every day with `/checkin` to keep yours alive.", embeds };

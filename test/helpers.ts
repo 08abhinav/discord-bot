@@ -14,8 +14,11 @@ export class FakeKV {
   async delete(key: string): Promise<void> {
     this.store.delete(key);
   }
-  async list(opts: { prefix?: string } = {}) {
-    const keys = [...this.store.keys()].filter((k) => k.startsWith(opts.prefix ?? "")).map((name) => ({ name }));
+  async list(opts: { prefix?: string; limit?: number } = {}) {
+    const keys = [...this.store.keys()]
+      .filter((k) => k.startsWith(opts.prefix ?? ""))
+      .slice(0, opts.limit)
+      .map((name) => ({ name }));
     return { keys, list_complete: true, cursor: "" };
   }
 }
@@ -77,6 +80,42 @@ export interface RecordedCall {
   body: any;
   /** The Authorization header, when the call had one. */
   auth?: string;
+  userAgent?: string;
+}
+
+/**
+ * A stand-in for the Workers cache. Cloudflare's cache only takes GET
+ * requests, and a match without `ignoreMethod` only finds a GET entry, so a
+ * HEAD has to be re-keyed as a GET to reach the card.
+ */
+export class FakeCache {
+  /** The stored entries, keyed by address. */
+  entries = new Map<string, { body: ArrayBuffer; headers: Headers; status: number }>();
+
+  async match(request: Request, options?: { ignoreMethod?: boolean }): Promise<Response | undefined> {
+    if (!options?.ignoreMethod && request.method !== "GET") return undefined;
+    const hit = this.entries.get(request.url);
+    return hit && new Response(hit.body, { status: hit.status, headers: hit.headers });
+  }
+
+  async put(request: Request, response: Response): Promise<void> {
+    if (request.method !== "GET") throw new Error("The cache only takes GET requests");
+    this.entries.set(request.url, {
+      body: await response.arrayBuffer(),
+      headers: response.headers,
+      status: response.status,
+    });
+  }
+
+  /** The cache as the Worker sees it. */
+  readonly storage = { open: async () => this };
+}
+
+/** A context that keeps the work the Worker hands to `waitUntil`, so a test can wait for it. */
+export function makeCtx() {
+  const pending: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => void pending.push(p), passThroughOnException() {} } as unknown as ExecutionContext;
+  return { ctx, settle: () => Promise.all(pending) };
 }
 
 function parseBody(body: unknown): unknown {
@@ -103,10 +142,13 @@ export function mockFetch(
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     const method = init?.method ?? "GET";
     const body = parseBody(init?.body);
-    const auth = new Headers(init?.headers).get("Authorization") ?? undefined;
-    calls.push({ url: url.href, method, body, auth });
+    const headers = new Headers(init?.headers);
+    const auth = headers.get("Authorization") ?? undefined;
+    const userAgent = headers.get("User-Agent") ?? undefined;
+    calls.push({ url: url.href, method, body, auth, userAgent });
     if (url.hostname === "api.github.com") {
-      return new Response(JSON.stringify(github(url)), { status: 200 });
+      const response = github(url);
+      return response instanceof Response ? response : new Response(JSON.stringify(response), { status: 200 });
     }
     const override = discord({ url: url.href, method, body, auth });
     if (override) return override;
