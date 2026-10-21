@@ -209,7 +209,7 @@ async function onPullRequest(e: PullRequestEvent, env: Env, cfg: Config): Promis
       const searched = await searchMergedPrs(env, cfg, program);
       const prs = searched.some((p) => p.url === pr.html_url)
         ? searched
-        : [...searched, { login: pr.user.login, mergedAt: mergedAt.toISOString(), url: pr.html_url }];
+        : [...searched, { login: pr.user.login, mergedAt: mergedAt.toISOString(), url: pr.html_url, title: pr.title, repo: e.repository.name, number: pr.number}];
       await cacheLeaderboard(env, cfg, program, prs);
       const others = prs.filter((p) => p.login.toLowerCase() === login && p.url !== pr.html_url);
       const count = others.length + 1;
